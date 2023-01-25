@@ -46,6 +46,8 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	fmt.Println(updateMsg)
+
 	err = me.ReplyMessage(updateMsg.Message.Chat.ID, "")
 	if err != nil {
 		sentry.CaptureException(fmt.Errorf(
