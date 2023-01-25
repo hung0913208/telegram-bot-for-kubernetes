@@ -28,6 +28,7 @@ func init() {
 	if err != nil {
 		container.Terminate(fmt.Sprintf("sentry.Init: %v", err), 2)
 	}
+	defer sentry.Flush(2 * time.Second)
 
 	err = container.Register("cluster", cluster.NewModule())
 	if err != nil {
