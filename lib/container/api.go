@@ -36,7 +36,10 @@ func Init() error {
 		return errors.New("Only call init container one time at the begining")
 	}
 
-	iContainerManager = &containerImpl{}
+	iContainerManager = &containerImpl{
+		mapping: make(map[string]wrapImpl),
+		modules: make([]Module, 0),
+	}
 	return nil
 }
 
