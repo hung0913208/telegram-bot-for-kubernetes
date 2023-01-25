@@ -12,7 +12,7 @@ import (
 
 type Telegram interface {
 	ParseIncomingRequest(reader io.Reader) (*Update, error)
-	ReplyMessage(chatId int64, text string) error
+	ReplyMessage(chatId int, text string) error
 }
 
 type telegramImpl struct {
@@ -40,9 +40,9 @@ func (self *telegramImpl) ParseIncomingRequest(reader io.Reader) (*Update, error
 	return &msgUpdate, nil
 }
 
-func (self *telegramImpl) ReplyMessage(chatId int64, text string) error {
+func (self *telegramImpl) ReplyMessage(chatId int, text string) error {
 	replyObj := map[string]string{
-		"chat_id": strconv.FormatInt(chatId, 10),
+		"chat_id": strconv.Itoa(chatId),
 		"text":    text,
 	}
 	replyMsg, err := json.Marshal(replyObj)
