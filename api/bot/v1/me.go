@@ -38,6 +38,11 @@ func init() {
 
 func Handler(w http.ResponseWriter, r *http.Request) {
 	defer sentry.Flush(2 * time.Second)
+
+	if r.Method == "GET" {
+		return
+	}
+
 	me := telegram.NewTelegram(os.Getenv("TELEGRAM_TOKEN"))
 
 	updateMsg, err := me.ParseIncomingRequest(r.Body)
