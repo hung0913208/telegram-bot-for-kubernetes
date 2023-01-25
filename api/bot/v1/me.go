@@ -20,7 +20,7 @@ func init() {
 	}
 
 	err = sentry.Init(sentry.ClientOptions{
-		Dsn:              "",
+		Dsn:              os.Getenv("SENTRY_DSN"),
 		Debug:            true,
 		EnableTracing:    true,
 		TracesSampleRate: 1.0,
