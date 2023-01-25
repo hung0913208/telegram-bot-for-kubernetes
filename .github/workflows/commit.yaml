@@ -19,5 +19,8 @@ jobs:
       with:
         go-version: 1.19
 
+    - name: Do rebuild
+      run: go build -v ./...
+
     - name: Do unit test
-      run: go test -v ./test/...
+      run: go test -v ./...
