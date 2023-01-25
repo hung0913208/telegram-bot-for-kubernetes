@@ -43,6 +43,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	updateMsg, err := me.ParseIncomingRequest(r.Body)
 	if err != nil {
 		sentry.CaptureException(err)
+		return
 	}
 
 	err = me.ReplyMessage(updateMsg.Message.Chat.ID, "")
@@ -52,5 +53,6 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			updateMsg.Message.Chat.ID,
 			err,
 		))
+		return
 	}
 }
