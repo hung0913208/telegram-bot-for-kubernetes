@@ -6,13 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
 )
 
 type Telegram interface {
 	ParseIncomingRequest(reader io.Reader) (*Update, error)
-	ReplyMessage(chatId int, text string) error
+	ReplyMessage(chatId int64, text string) error
 }
 
 type telegramImpl struct {
@@ -40,9 +41,9 @@ func (self *telegramImpl) ParseIncomingRequest(reader io.Reader) (*Update, error
 	return &msgUpdate, nil
 }
 
-func (self *telegramImpl) ReplyMessage(chatId int, text string) error {
+func (self *telegramImpl) ReplyMessage(chatId int64, text string) error {
 	replyObj := map[string]string{
-		"chat_id": strconv.Itoa(chatId),
+		"chat_id": strconv.FormatInt(chatId, 10),
 		"text":    text,
 	}
 	replyMsg, err := json.Marshal(replyObj)
@@ -50,10 +51,29 @@ func (self *telegramImpl) ReplyMessage(chatId int, text string) error {
 		return err
 	}
 
-	_, err = http.Post(
+	resp, err := http.Post(
 		fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", self.token),
 		"application/json",
 		bytes.NewBuffer(replyMsg),
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	defer func(body io.ReadCloser) {
+		if err := body.Close(); err != nil {
+			log.Println("failed to close response body")
+		}
+	}(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		errMsg := &APIResponse{}
+		err := json.NewDecoder(resp.Body).Decode(&errMsg)
+
+		if err != nil {
+			return fmt.Errorf("Error parsing response: %v", err)
+		}
+
+		return fmt.Errorf("Status %q: %s", resp.Status, errMsg.Description)
+	}
+	return nil
 }

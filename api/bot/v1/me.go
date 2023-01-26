@@ -51,9 +51,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sentry.CaptureMessage(fmt.Sprintf("update : %v", updateMsg))
-
-	err = me.ReplyMessage(updateMsg.Message.Chat.ID, "")
+	err = me.ReplyMessage(updateMsg.Message.Chat.ID, "test test test")
 	if err != nil {
 		sentry.CaptureException(fmt.Errorf(
 			"reply message to %d fail: \n\n%v",
