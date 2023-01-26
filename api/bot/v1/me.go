@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	sentry "github.com/getsentry/sentry-go"
 
 	"github.com/hung0913208/telegram-bot-for-kubernetes/lib/container"
+	"github.com/hung0913208/telegram-bot-for-kubernetes/lib/logs"
 	"github.com/hung0913208/telegram-bot-for-kubernetes/lib/telegram"
 	"github.com/hung0913208/telegram-bot-for-kubernetes/modules/cluster"
 )
@@ -44,20 +46,26 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	me := telegram.NewTelegram(os.Getenv("TELEGRAM_TOKEN"))
-
+	logger := logs.GetLogger()
 	updateMsg, err := me.ParseIncomingRequest(r.Body)
+
 	if err != nil {
-		sentry.CaptureException(err)
+		logger.Errorf("Fail parsing: %v", err)
 		return
 	}
 
-	err = me.ReplyMessage(updateMsg.Message.Chat.ID, "test test test")
-	if err != nil {
-		sentry.CaptureException(fmt.Errorf(
-			"reply message to %d fail: \n\n%v",
-			updateMsg.Message.Chat.ID,
-			err,
-		))
-		return
+	command := strings.Trim(updateMsg.Message.Text, " ")
+
+	if strings.HasPrefix(command, os.Getenv("TELEGRAM_ALIAS")) {
+		err = me.ReplyMessage(updateMsg.Message.Chat.ID, "test test test")
+
+		if err != nil {
+			logger.Errorf(
+				"reply message to %d fail: \n\n%v",
+				updateMsg.Message.Chat.ID,
+				err,
+			)
+			return
+		}
 	}
 }
