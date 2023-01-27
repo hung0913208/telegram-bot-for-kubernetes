@@ -3,9 +3,7 @@ package logs
 import (
 	"errors"
 	"io"
-	"log"
-	"sync"
-    "time"
+    "fmt"
 
 	sentry "github.com/getsentry/sentry-go"
 )
@@ -30,8 +28,6 @@ type Logger interface {
 }
 
 type loggerImpl struct {
-	mu sync.Mutex // ensures atomic writes; protects the following fields
-
 	logType       logTypeEnum
 	useStacktrace bool
 }
@@ -40,115 +36,78 @@ var loggerUniqueObject *loggerImpl
 
 func GetLogger() Logger {
 	if loggerUniqueObject == nil {
-		loggerUniqueObject = &loggerImpl{
-			mu: sync.Mutex{},
-		}
+		loggerUniqueObject = &loggerImpl{}
 	}
 
-	log.SetOutput(loggerUniqueObject)
 	return loggerUniqueObject
 }
 
 func GetLoggerWithStacktrace() Logger {
 	if loggerUniqueObject == nil {
-		loggerUniqueObject = &loggerImpl{
-			mu: sync.Mutex{},
-		}
+		loggerUniqueObject = &loggerImpl{}
 	}
 
 	loggerUniqueObject.useStacktrace = true
 
-	log.SetOutput(loggerUniqueObject)
 	return loggerUniqueObject
 }
 
-func (self *loggerImpl) Write(p []byte) (n int, err error) {
-	defer sentry.Flush(2 * time.Second)
-	sentry.CaptureMessage(string(p))
-
-	switch self.logType {
-	case eLogWarning:
-		event := sentry.NewEvent()
-		event.Level = sentry.LevelWarning
-		event.Message = string(p)
-
-		if sentry.CaptureEvent(event) != nil {
-			return len(p), nil
-		} else {
-			return 0, errors.New("Please initize sentry first")
-		}
-
-	case eLogError:
-		event := sentry.NewEvent()
-		event.Level = sentry.LevelError
-		event.Message = string(p)
-
-		if self.useStacktrace {
-			event.Threads = []sentry.Thread{{
-				Stacktrace: sentry.NewStacktrace(),
-				Crashed:    false,
-				Current:    true,
-			}}
-		}
-
-		if sentry.CaptureEvent(event) != nil {
-			return len(p), nil
-		} else {
-			return 0, errors.New("Please initize sentry first")
-		}
-
+func (self *loggerImpl) writeLog(msg string, level logTypeEnum) error {
+	switch level {
 	case eLogFatal:
-		if sentry.CaptureException(errors.New(string(p))) != nil {
-			panic(string(p))
+        err := sentry.CaptureException(errors.New(msg))
+
+        if err != nil {
+			panic(msg)
 		} else {
-			return 0, errors.New("Please initize sentry first")
+			return errors.New("Please initize sentry first")
 		}
 
 	default:
-		event := sentry.NewEvent()
-		event.Level = sentry.LevelInfo
-		event.Message = string(p)
+	    event := sentry.NewEvent()
+	    event.Level = sentry.LevelWarning
+	    event.Message = msg
+
+	    if self.useStacktrace {
+	    	event.Threads = []sentry.Thread{{
+	    		Stacktrace: sentry.NewStacktrace(),
+	    		Crashed:    false,
+	    		Current:    true,
+	    	}}
+	    }
 
 		if sentry.CaptureEvent(event) != nil {
-			return len(p), nil
+			return nil
 		} else {
-			return 0, errors.New("Please initize sentry first")
+			return errors.New("Please initize sentry first")
 		}
 	}
+
+    return errors.New("Crashing!!")
 }
 
 func (self *loggerImpl) Infof(format string, args ...interface{}) {
-	defer self.mu.Unlock()
-
-	self.mu.Lock()
-	self.logType = eLogInfo
-
-	log.Printf(format + "\n", args)
+    self.writeLog(fmt.Sprintf(format, args), eLogInfo)
 }
 
 func (self *loggerImpl) Warnf(format string, args ...interface{}) {
-	defer self.mu.Unlock()
-
-	self.mu.Lock()
-	self.logType = eLogWarning
-
-	log.Printf(format + "\n", args)
+    self.writeLog(fmt.Sprintf(format, args), eLogWarning)
 }
 
 func (self *loggerImpl) Errorf(format string, args ...interface{}) {
-	defer self.mu.Unlock()
-
-	self.mu.Lock()
-	self.logType = eLogError
-
-	log.Printf(format + "\n", args)
+    self.writeLog(fmt.Sprintf(format, args), eLogError)
 }
 
 func (self *loggerImpl) Fatalf(format string, args ...interface{}) {
-	defer self.mu.Unlock()
-
-	self.mu.Lock()
-	self.logType = eLogFatal
-
-	log.Printf(format + "\n", args)
+    self.writeLog(fmt.Sprintf(format, args), eLogFatal)
 }
+
+func (self *loggerImpl) Write(b []byte) (int, error) {
+    err := self.writeLog(string(b), eLogInfo)
+    if err != nil {
+        return 0, err
+    }
+
+    return len(b), nil
+}
+
