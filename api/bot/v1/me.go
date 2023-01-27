@@ -54,10 +54,9 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	command := ""
 	if updateMsg.Message.Text != nil && len(updateMsg.Message.Text) > 0{
 		command := strings.Trim(updateMsg.Message.Text, " ")
-	} else {
-		return
 	}
 
 	if strings.HasPrefix(command, os.Getenv("TELEGRAM_ALIAS")) {
