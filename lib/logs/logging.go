@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"sync"
+    "time"
 
 	sentry "github.com/getsentry/sentry-go"
 )
