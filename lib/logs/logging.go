@@ -49,7 +49,7 @@ func GetLogger() Logger {
 func GetLoggerWithStacktrace() Logger {
 	if loggerUniqueObject == nil {
 		loggerUniqueObject = &loggerImpl{
-			mu: &sync.Mutex{},
+			mu: sync.Mutex{},
 		}
 	}
 
