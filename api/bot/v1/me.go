@@ -54,6 +54,13 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	out, err := json.Marshal(updateMsg)
+    if err != nil {
+        panic (err)
+    }
+
+	sentry.CaptureMessage(string(out))
+
 	command := ""
 	if len(updateMsg.Message.Text) > 0 {
 		command = strings.Trim(updateMsg.Message.Text, " ")
