@@ -65,17 +65,6 @@ func (self *loggerImpl) Write(p []byte) (n int, err error) {
 	sentry.CaptureMessage(string(p))
 
 	switch self.logType {
-	case eLogInfo:
-		event := sentry.NewEvent()
-		event.Level = sentry.LevelInfo
-		event.Message = string(p)
-
-		if sentry.CaptureEvent(event) != nil {
-			return len(p), nil
-		} else {
-			return 0, errors.New("Please initize sentry first")
-		}
-
 	case eLogWarning:
 		event := sentry.NewEvent()
 		event.Level = sentry.LevelWarning
@@ -114,7 +103,15 @@ func (self *loggerImpl) Write(p []byte) (n int, err error) {
 		}
 
 	default:
-		return len(p), nil
+		event := sentry.NewEvent()
+		event.Level = sentry.LevelInfo
+		event.Message = string(p)
+
+		if sentry.CaptureEvent(event) != nil {
+			return len(p), nil
+		} else {
+			return 0, errors.New("Please initize sentry first")
+		}
 	}
 }
 
@@ -124,7 +121,7 @@ func (self *loggerImpl) Infof(format string, args ...interface{}) {
 	self.mu.Lock()
 	self.logType = eLogInfo
 
-	log.Printf(format, args)
+	log.Printf(format + "\n", args)
 }
 
 func (self *loggerImpl) Warnf(format string, args ...interface{}) {
@@ -133,7 +130,7 @@ func (self *loggerImpl) Warnf(format string, args ...interface{}) {
 	self.mu.Lock()
 	self.logType = eLogWarning
 
-	log.Printf(format, args)
+	log.Printf(format + "\n", args)
 }
 
 func (self *loggerImpl) Errorf(format string, args ...interface{}) {
@@ -142,7 +139,7 @@ func (self *loggerImpl) Errorf(format string, args ...interface{}) {
 	self.mu.Lock()
 	self.logType = eLogError
 
-	log.Printf(format, args)
+	log.Printf(format + "\n", args)
 }
 
 func (self *loggerImpl) Fatalf(format string, args ...interface{}) {
@@ -151,5 +148,5 @@ func (self *loggerImpl) Fatalf(format string, args ...interface{}) {
 	self.mu.Lock()
 	self.logType = eLogFatal
 
-	log.Printf(format, args)
+	log.Printf(format + "\n", args)
 }
