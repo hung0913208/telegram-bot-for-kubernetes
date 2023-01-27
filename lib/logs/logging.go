@@ -62,6 +62,8 @@ func GetLoggerWithStacktrace() Logger {
 }
 
 func (self *loggerImpl) Write(p []byte) (n int, err error) {
+	sentry.CaptureMessage(string(p))
+
 	switch self.logType {
 	case eLogInfo:
 		event := sentry.NewEvent()
