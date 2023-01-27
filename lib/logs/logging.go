@@ -62,6 +62,7 @@ func GetLoggerWithStacktrace() Logger {
 }
 
 func (self *loggerImpl) Write(p []byte) (n int, err error) {
+	defer sentry.Flush(2 * time.Second)
 	sentry.CaptureMessage(string(p))
 
 	switch self.logType {
