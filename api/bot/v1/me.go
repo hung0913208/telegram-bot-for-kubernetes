@@ -59,8 +59,6 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		command = strings.Trim(updateMsg.Message.Text, " ")
 	}
 
-	sentry.CaptureMessage(command)
-
 	if strings.HasPrefix(command, os.Getenv("TELEGRAM_ALIAS")) {
 		err = me.ReplyMessage(updateMsg.Message.Chat.ID, "test test test")
 

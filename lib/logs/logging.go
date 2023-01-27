@@ -39,7 +39,9 @@ var loggerUniqueObject *loggerImpl
 
 func GetLogger() Logger {
 	if loggerUniqueObject == nil {
-		loggerUniqueObject = &loggerImpl{}
+		loggerUniqueObject = &loggerImpl{
+			mu: sync.Mutex{},
+		}
 	}
 
 	log.SetOutput(loggerUniqueObject)
