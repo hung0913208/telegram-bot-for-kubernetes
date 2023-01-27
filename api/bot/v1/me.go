@@ -54,7 +54,11 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	command := strings.Trim(updateMsg.Message.Text, " ")
+	if updateMsg.Message.Text != nil && len(updateMsg.Message.Text) > 0{
+		command := strings.Trim(updateMsg.Message.Text, " ")
+	} else {
+		return
+	}
 
 	if strings.HasPrefix(command, os.Getenv("TELEGRAM_ALIAS")) {
 		err = me.ReplyMessage(updateMsg.Message.Chat.ID, "test test test")
