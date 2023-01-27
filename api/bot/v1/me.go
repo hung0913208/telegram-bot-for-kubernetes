@@ -55,7 +55,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	command := ""
-	if updateMsg.Message.Text != nil && len(updateMsg.Message.Text) > 0{
+	if len(updateMsg.Message.Text) > 0 {
 		command = strings.Trim(updateMsg.Message.Text, " ")
 	}
 
