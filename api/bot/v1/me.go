@@ -46,7 +46,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	me := telegram.NewTelegram(os.Getenv("TELEGRAM_TOKEN"))
-	logger := logs.GetLogger()
+	logger := logs.NewLogger()
 	updateMsg, err := me.ParseIncomingRequest(r.Body)
 
 	if err != nil {
@@ -59,6 +59,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		command = strings.Trim(updateMsg.Message.Text, " ")
 	}
 
+    logger.Infof("%s", command)
 	if strings.HasPrefix(command, os.Getenv("TELEGRAM_ALIAS")) {
 		err = me.ReplyMessage(updateMsg.Message.Chat.ID, "test test test")
 

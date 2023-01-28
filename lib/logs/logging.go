@@ -34,25 +34,26 @@ type loggerImpl struct {
 
 var loggerUniqueObject *loggerImpl
 
-func GetLogger() Logger {
-	if loggerUniqueObject == nil {
-		loggerUniqueObject = &loggerImpl{}
-	}
-
-	return loggerUniqueObject
+func NewLogger() Logger {
+    return &loggerImpl{}
 }
 
-func GetLoggerWithStacktrace() Logger {
-	if loggerUniqueObject == nil {
-		loggerUniqueObject = &loggerImpl{}
-	}
-
-	loggerUniqueObject.useStacktrace = true
-
-	return loggerUniqueObject
+func NewLoggerWithStacktrace() Logger {
+    return  &loggerImpl{useStacktrace: true}
 }
 
 func (self *loggerImpl) writeLog(msg string, level logTypeEnum) error {
+	event := sentry.NewEvent()
+
+    switch level {
+    case eLogInfo:
+	    event.Level = sentry.LevelInfo
+    case eLogError:
+	    event.Level = sentry.LevelError
+    case eLogWarning:
+	    event.Level = sentry.LevelWarning
+    }
+
 	switch level {
 	case eLogFatal:
         err := sentry.CaptureException(errors.New(msg))
@@ -64,8 +65,6 @@ func (self *loggerImpl) writeLog(msg string, level logTypeEnum) error {
 		}
 
 	default:
-	    event := sentry.NewEvent()
-	    event.Level = sentry.LevelWarning
 	    event.Message = msg
 
 	    if self.useStacktrace {
