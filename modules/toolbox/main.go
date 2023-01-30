@@ -1,6 +1,8 @@
 package toolbox
 
 import (
+    "os"
+
     "github.com/spf13/cobra"
 	"github.com/hung0913208/telegram-bot-for-kubernetes/lib/bizfly"
 )
@@ -69,9 +71,8 @@ func (self *toolboxImpl) newBizflyParser() *cobra.Command {
     bizflyLogin.PersistentFlags().
                 String("project-id", "", 
                        "The project id which is used to identify and isolate billing resource")
-    root.AddCommand(bizflyLogin)
 
-    bizflyKubeconfig := &cobra.Command{
+    root.AddCommand(&cobra.Command{
         Use:   "kubeconfig",
         Short: "Login specific bizfly account",
         Long:  "Authenticate bizfly cloud project:\n\n" +
@@ -81,8 +82,8 @@ func (self *toolboxImpl) newBizflyParser() *cobra.Command {
                 return
             }
         },
-    }
-    root.AddCommand(bizflyKubeconfig)
+    })
+    root.AddCommand(bizflyLogin)
     return root
 }
 
@@ -94,7 +95,7 @@ func (self *toolboxImpl) newVercelParser() *cobra.Command {
                "and configuration of the SRE cloud toolbox server",
     }
     
-    vercelPrintEnv := &cobra.Command{
+    root.AddCommand(&cobra.Command{
         Use:   "env",
         Short: "Print specific environment variable",
         Run:   func(cmd *cobra.Command, args []string) {
@@ -104,8 +105,8 @@ func (self *toolboxImpl) newVercelParser() *cobra.Command {
             }
 
             self.Okf("%s = %s", args[0], os.Getenv(args[0]))
-        }
-    }
+        },
+    })
   
     return root
 }
@@ -131,6 +132,7 @@ func (self *toolboxImpl) _tmain(args []string) error {
     }
 
     parser.SetArgs(args)
-    return nil
+    parser.SetErr(self.logger)
+    return parser.Execute()
 }
 

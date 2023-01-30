@@ -87,6 +87,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	    return
 	}
 
+
     logger := logs.NewLogger()
 	updateMsg, err := me.ParseIncomingRequest(r.Body)
 
@@ -104,9 +105,21 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 
     if strings.HasPrefix(input, os.Getenv("TELEGRAM_ALIAS")) {
         needAnswer = true
+        input = strings.Trim(
+            strings.TrimPrefix(input, os.Getenv("TELEGRAM_ALIAS")),
+            " ",
+        )
     }
 
     if needAnswer {
+        toolboxModule, err := container.Pick("toolbox")
+        if err != nil {
+            logger.Errorf("Fetch `toolbox` got issue: %v", err)
+            return
+        }
+
+        toolboxModule.Execute(strings.Split(input, " "))
+
         if len(output) > 0 {
             err = me.ReplyMessage(updateMsg.Message.Chat.ID, output)
         }
