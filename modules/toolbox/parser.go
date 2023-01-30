@@ -1,6 +1,7 @@
 package toolbox
 
 import (
+    "fmt"
     "os"
 
     "github.com/spf13/cobra"
@@ -22,22 +23,22 @@ func (self *toolboxImpl) newBizflyParser() *cobra.Command {
         Run:   func(cmd *cobra.Command, args []string) {
             host, err := cmd.Flags().GetString("host")
             if err != nil {
-                self.Failf("parse host fail: %v", err)
+                self.Fail(fmt.Sprintf("parse host fail: %v", err))
                 return
             }
             project, err := cmd.Flags().GetString("project-id")
             if err != nil {
-                self.Failf("parse project-id fail: %v", err)
+                self.Fail(fmt.Sprintf("parse project-id fail: %v", err))
                 return
             }
             username, err := cmd.Flags().GetString("email")
             if err != nil {
-                self.Failf("parse email fail: %v", err)
+                self.Fail(fmt.Sprintf("parse email fail: %v", err))
                 return
             }
             password, err := cmd.Flags().GetString("password")
             if err != nil {
-                self.Failf("parse password fail: %v", err)
+                self.Fail(fmt.Sprintf("parse password fail: %v", err))
                 return
             }
 
@@ -49,15 +50,15 @@ func (self *toolboxImpl) newBizflyParser() *cobra.Command {
                 self.timeout,
             )
             if err != nil {
-                self.Failf("bizfly login fail: %v", err)
+                self.Fail(fmt.Sprintf("bizfly login fail: %v", err))
                 return
             }
 
             self.bizflyApi[username] = client
             if len(project) > 0 {
-                self.Okf("login %s, project %s, success", username, project)
+                self.Ok(fmt.Sprintf("login %s, project %s, success", username, project))
             } else {
-                self.Okf("login %s success", username)
+                self.Ok(fmt.Sprintf("login %s success", username))
             }
         },
     }
@@ -100,11 +101,10 @@ func (self *toolboxImpl) newVercelParser() *cobra.Command {
         Short: "Print specific environment variable",
         Run:   func(cmd *cobra.Command, args []string) {
             if len(args) != 1 {
-                self.Failf("Expect 1 argument but got %d", len(args))
+                self.Fail(fmt.Sprintf("Expect 1 argument but got %d", len(args)))
                 return
             }
-
-            self.Okf("%s = %s", args[0], os.Getenv(args[0]))
+            self.Ok(fmt.Sprintf("%s = %s", args[0], os.Getenv(args[0])))
         },
     })
   
@@ -124,15 +124,4 @@ func (self *toolboxImpl) newRootParser() *cobra.Command {
     return root
 }
 
-var parser *cobra.Command
-
-func (self *toolboxImpl) _tmain(args []string) error {
-    if parser == nil {
-        parser = self.newRootParser()
-    }
-
-    parser.SetArgs(args)
-    parser.SetErr(self.logger)
-    return parser.Execute()
-}
 

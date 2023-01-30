@@ -1,9 +1,11 @@
 package handler
 
 import (
+    "encoding/json"
 	"fmt"
 	"net/http"
 	"os"
+    "strconv"
 	"strings"
 	"time"
 
@@ -16,9 +18,6 @@ import (
 	"github.com/hung0913208/telegram-bot-for-kubernetes/modules/toolbox"
 )
 
-var input string
-var output string
-
 const (
     NoError              = 0
     ErrorInitContainer   = 1
@@ -30,8 +29,12 @@ const (
 var me telegram.Telegram
 
 func init() {
-    timeout := 10
-	err := container.Init()
+    timeout, err := strconv.Atoi(os.Getenv("TIMEOUT"))
+    if err != nil {
+        timeout = 200
+    }
+
+	err = container.Init()
 	if err != nil {
 	    container.Terminate(
             "Can't setup container to store modules",
@@ -55,19 +58,10 @@ func init() {
 	    container.Terminate("Can't register module `cluster`", ErrorRegisterCluster)
 	}
 
-    err = container.RegisterSimpleModule(
-        "toolbox", 
-        toolbox.NewToolbox(input, output),
-        timeout,
-    )
-    if err != nil {
-        container.Terminate("Can't register module `toolbox`", ErrorRegisterBot)
-    }
+    me = telegram.NewTelegram(os.Getenv("TELEGRAM_TOKEN"))
 
-    me := telegram.NewTelegram(os.Getenv("TELEGRAM_TOKEN"))
-
-    if len(os.Getenv("VERCEL_URL")) > 0 {
-        webhook := fmt.Sprintf("https://%s/api/bot/v1/me", os.Getenv("VERCEL_URL"))
+    if len(os.Getenv("TELEGRAM_WEBHOOK")) > 0 {
+        webhook := fmt.Sprintf("https://%s/api/bot/v1/me", os.Getenv("TELEGRAM_WEBHOOK"))
 
         webhookRegistered, err := me.GetWebhook()
         if err != nil {
@@ -81,25 +75,53 @@ func init() {
 }
 
 func Handler(w http.ResponseWriter, r *http.Request) {
-	defer sentry.Flush(2 * time.Second)
+    var msg *telegram.Message
 
 	if r.Method == "GET" {
 	    return
 	}
 
-
     logger := logs.NewLogger()
 	updateMsg, err := me.ParseIncomingRequest(r.Body)
 
+	defer func() {
+        if recover() != nil {
+            if updateMsg != nil {
+                out, _ := json.Marshal(updateMsg)
+
+                if os.Getenv("VERCEL_ENV") != "production" || os.Getenv("DEBUG") == "true" {
+                    logger.Warn(fmt.Sprintf("Crash when execute msg: %s", string(out)))
+                }
+            }
+        }
+
+        sentry.Flush(2 * time.Second)
+    }()
+
 	if err != nil {
-	    logger.Errorf("Fail parsing: %v", err)
+	    logger.Error(fmt.Sprintf("Fail parsing: %v", err))
 	    return
 	}
 
-    input = strings.Trim(updateMsg.Message.Text, " ")
-    needAnswer := false
+    if msg == nil && updateMsg.Message != nil {
+        msg = updateMsg.Message
+    }
+    if msg == nil && updateMsg.EditedMessage != nil {
+        msg = updateMsg.EditedMessage
+    }
+    if msg == nil && updateMsg.ChannelPost != nil {
+        msg = updateMsg.ChannelPost
+    }
+    if msg == nil && updateMsg.EditedChannelPost != nil {
+        msg = updateMsg.EditedChannelPost
+    }
 
-    if updateMsg.Message.Chat.Type == "private" {
+    needAnswer := false
+    input := strings.Trim(msg.Text, " ")
+    output := ""
+    session := toolbox.NewToolbox(input, &output)
+
+    if msg.Chat.Type == "private" {
         needAnswer = true
     }
 
@@ -112,23 +134,23 @@ func Handler(w http.ResponseWriter, r *http.Request) {
     }
 
     if needAnswer {
-        toolboxModule, err := container.Pick("toolbox")
-        if err != nil {
-            logger.Errorf("Fetch `toolbox` got issue: %v", err)
+        err := session.Execute(strings.Split(input, " "))
+        if err != nil && len(output) == 0 {
+            output = fmt.Sprintf("%v", err)
+        }
+
+        if len(output) == 0 {
             return
         }
 
-        toolboxModule.Execute(strings.Split(input, " "))
-
-        if len(output) > 0 {
-            err = me.ReplyMessage(updateMsg.Message.Chat.ID, output)
-        }
-
+        err = me.ReplyMessage(msg.Chat.ID, output)
         if err != nil {
-            logger.Errorf(
-                "reply message to %d fail: \n\n%v",
-                updateMsg.Message.Chat.ID,
-                err,
+            logger.Error(
+                fmt.Sprintf(
+                    "reply message to %d fail: \n\n%v",
+                    updateMsg.Message.Chat.ID,
+                    err,
+                ),
             )
             return
         }

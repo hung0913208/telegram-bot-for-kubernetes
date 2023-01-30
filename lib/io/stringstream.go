@@ -5,27 +5,30 @@ import (
 )
 
 type ioStringStreamImpl struct {
-    input, output string
+    input  string
+    output *string
 }
 
-func NewStringStream(input string, output string) Io {
+func NewStringStream(input string, output *string) Io {
     return &ioStringStreamImpl{
         input:  input,
         output: output,
     }
 }
 
-func (self *ioStringStreamImpl) Scanf(
+func (self *ioStringStreamImpl) Scan(
     format string,
     args ...interface{},
 ) (int, error) {
     return fmt.Sscanf(self.input, format, args)    
 }
 
-func (self *ioStringStreamImpl) Printf(
-    format string,
-    args ...interface{},
-) error {
-    self.output += fmt.Sprintf(format, args)
+func (self *ioStringStreamImpl) Print(msg string) error {
+    *(self.output) += msg
     return nil
+}
+
+func (self *ioStringStreamImpl) Write(b []byte) (int, error) {
+    *(self.output) += string(b)
+    return len(b), nil
 }

@@ -3,7 +3,6 @@ package logs
 import (
 	"errors"
 	"io"
-    "fmt"
 
 	sentry "github.com/getsentry/sentry-go"
 )
@@ -21,10 +20,10 @@ const (
 type Logger interface {
 	io.Writer
 
-	Infof(format string, args ...interface{})
-	Warnf(format string, args ...interface{})
-	Errorf(format string, args ...interface{})
-	Fatalf(format string, args ...interface{})
+	Info(msg string)
+	Warn(msg string)
+	Error(msg string)
+	Fatal(msg string)
 }
 
 type loggerImpl struct {
@@ -85,20 +84,20 @@ func (self *loggerImpl) writeLog(msg string, level logTypeEnum) error {
     return errors.New("Crashing!!")
 }
 
-func (self *loggerImpl) Infof(format string, args ...interface{}) {
-    self.writeLog(fmt.Sprintf(format, args), eLogInfo)
+func (self *loggerImpl) Info(msg string) {
+    self.writeLog(msg, eLogInfo)
 }
 
-func (self *loggerImpl) Warnf(format string, args ...interface{}) {
-    self.writeLog(fmt.Sprintf(format, args), eLogWarning)
+func (self *loggerImpl) Warn(msg string) {
+    self.writeLog(msg, eLogWarning)
 }
 
-func (self *loggerImpl) Errorf(format string, args ...interface{}) {
-    self.writeLog(fmt.Sprintf(format, args), eLogError)
+func (self *loggerImpl) Error(msg string) {
+    self.writeLog(msg, eLogError)
 }
 
-func (self *loggerImpl) Fatalf(format string, args ...interface{}) {
-    self.writeLog(fmt.Sprintf(format, args), eLogFatal)
+func (self *loggerImpl) Fatal(msg string) {
+    self.writeLog(msg, eLogFatal)
 }
 
 func (self *loggerImpl) Write(b []byte) (int, error) {
