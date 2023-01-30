@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"log"
 	"os"
+    "time"
 )
 
 type Module interface {
-	Init() error
+	Init(timeout time.Duration) error
 	Deinit() error
+    Execute(args []string) error
 }
 
 type RpcModule interface {
@@ -43,7 +45,8 @@ func Init() error {
 	return nil
 }
 
-func Register(name string, module Module) error {
+func RegisterSimpleModule(name string, module Module, 
+                          timeout int) error {
 	if iContainerManager == nil {
 		if err := Init(); err != nil {
 			return err
@@ -58,7 +61,7 @@ func Register(name string, module Module) error {
 		return fmt.Errorf("Object %s has been registered", name)
 	}
 
-	if err := module.Init(); err != nil {
+	if err := module.Init(time.Duration(timeout)*time.Millisecond); err != nil {
 		return err
 	}
 
@@ -70,6 +73,11 @@ func Register(name string, module Module) error {
 	}
 	iContainerManager.modules = append(iContainerManager.modules, module)
 	return nil
+}
+
+func RegisterRpcModule(name string, module Module,
+                       timeout int) error {
+    return nil
 }
 
 func Terminate(msg string, exitCode int) {
@@ -89,3 +97,25 @@ func Terminate(msg string, exitCode int) {
 
 	os.Exit(exitCode)
 }
+
+func Pick(name string) (Module, error) {
+    wrapper, ok := iContainerManager.mapping[name]
+
+    if !ok {
+        return nil, fmt.Errorf("Module `%s` doesn`t exist", name)
+    }
+    return wrapper.module, nil
+}
+
+func Lookup(index int) (Module, error) {
+    if index >= len(iContainerManager.modules) {
+        return nil, fmt.Errorf(
+            "index `%d` is out of scope, must below %d", 
+            index, 
+            len(iContainerManager.modules),
+        )
+    }
+
+    return iContainerManager.modules[index], nil
+}
+

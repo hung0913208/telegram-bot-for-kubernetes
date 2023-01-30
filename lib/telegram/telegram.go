@@ -14,6 +14,8 @@ import (
 type Telegram interface {
 	ParseIncomingRequest(reader io.Reader) (*Update, error)
 	ReplyMessage(chatId int64, text string) error
+    GetWebhook() (string, error)
+    SetWebhook(webhook string) error
 }
 
 type telegramImpl struct {

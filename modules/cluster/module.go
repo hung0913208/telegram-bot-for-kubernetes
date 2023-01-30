@@ -1,6 +1,8 @@
 package cluster
 
 import (
+    "time"
+
 	"github.com/hung0913208/telegram-bot-for-kubernetes/lib/container"
 )
 
@@ -15,7 +17,7 @@ func NewModule() Cluster {
 	return &clusterImpl{}
 }
 
-func (self *clusterImpl) Init() error {
+func (self *clusterImpl) Init(timeout time.Duration) error {
 	// @TODO: please fill this one
 	return nil
 }
@@ -23,4 +25,8 @@ func (self *clusterImpl) Init() error {
 func (self *clusterImpl) Deinit() error {
 	// @TODO: please fill this one
 	return nil
+}
+    
+func (self *clusterImpl) Execute(args []string) error {
+    return nil
 }
