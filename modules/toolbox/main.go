@@ -86,14 +86,40 @@ func (self *toolboxImpl) newBizflyParser() *cobra.Command {
     return root
 }
 
+func (self *toolboxImpl) newVercelParser() *cobra.Command {
+    root := &cobra.Command{
+        Use:   "vercel",
+        Short: "Vercel profile",
+        Long:  "The Vercel profile which is used to report status " +
+               "and configuration of the SRE cloud toolbox server",
+    }
+    
+    vercelPrintEnv := &cobra.Command{
+        Use:   "env",
+        Short: "Print specific environment variable",
+        Run:   func(cmd *cobra.Command, args []string) {
+            if len(args) != 1 {
+                self.Failf("Expect 1 argument but got %d", len(args))
+                return
+            }
+
+            self.Okf("%s = %s", args[0], os.Getenv(args[0]))
+        }
+    }
+  
+    return root
+}
+
 func (self *toolboxImpl) newRootParser() *cobra.Command {
     root := &cobra.Command{
         Use:   "sre",
         Short: "SRE cloud toolbox and command line",
-        Long:  "The SRE command line which is used to interact with resource ",
+        Long:  "The SRE command line which is used to interact with " +
+               "resource of the whole company",
     }
    
     root.AddCommand(self.newBizflyParser())
+    root.AddCommand(self.newVercelParser())
     return root
 }
 
