@@ -2,6 +2,7 @@ package handler
 
 import (
     "encoding/json"
+    "runtime/debug"
 	"fmt"
 	"net/http"
 	"os"
@@ -24,6 +25,7 @@ const (
     ErrorInitSentry      = 2
     ErrorRegisterCluster = 3
     ErrorRegisterBot     = 4
+    ErrorRegisterSql     = 5
 )
 
 var me telegram.Telegram
@@ -58,6 +60,16 @@ func init() {
 	    container.Terminate("Can't register module `cluster`", ErrorRegisterCluster)
 	}
 
+    // @TODO: implement database module
+    //err = container.RegisterSimpleModule(
+    //    "elephansql", 
+    //    db.NewModule(), 
+    //    timeout,
+    //)
+    //if err != nil {
+    //    container.Terminate("Can't register module `elephansql`", ErrorRegisterSql)
+    //}
+
     me = telegram.NewTelegram(os.Getenv("TELEGRAM_TOKEN"))
 
     if len(os.Getenv("TELEGRAM_WEBHOOK")) > 0 {
@@ -77,6 +89,11 @@ func init() {
 func Handler(w http.ResponseWriter, r *http.Request) {
     var msg *telegram.Message
 
+    timeout, err := strconv.Atoi(os.Getenv("TIMEOUT"))
+    if err != nil {
+        timeout = 200
+    }
+
 	if r.Method == "GET" {
 	    return
 	}
@@ -85,13 +102,27 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	updateMsg, err := me.ParseIncomingRequest(r.Body)
 
 	defer func() {
-        if recover() != nil {
+        err := recover()
+
+        if err != nil {
             if updateMsg != nil {
                 out, _ := json.Marshal(updateMsg)
 
                 if os.Getenv("VERCEL_ENV") != "production" || os.Getenv("DEBUG") == "true" {
-                    logger.Warn(fmt.Sprintf("Crash when execute msg: %s", string(out)))
+                    logger.Warn(fmt.Sprintf(
+                        "Crash %v when execute msg: \n%s\n\nStacktrace:\n%s", 
+                        err,
+                        string(out), 
+                        string(debug.Stack()),
+                    ))
                 }
+            }
+
+            if msg != nil {
+                me.ReplyMessage(
+                    msg.Chat.ID, 
+                    fmt.Sprintf("Crash with reason: %v", err),
+                )
             }
         }
 
@@ -118,8 +149,10 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 
     needAnswer := false
     input := strings.Trim(msg.Text, " ")
-    output := ""
-    session := toolbox.NewToolbox(input, &output)
+    outputs := make([]string, 0)
+    session := toolbox.NewToolbox(input, &outputs)
+
+    session.Init(time.Duration(timeout) * time.Millisecond)
 
     if msg.Chat.Type == "private" {
         needAnswer = true
@@ -134,25 +167,36 @@ func Handler(w http.ResponseWriter, r *http.Request) {
     }
 
     if needAnswer {
-        err := session.Execute(strings.Split(input, " "))
-        if err != nil && len(output) == 0 {
-            output = fmt.Sprintf("%v", err)
+        err = session.Execute(strings.Split(input, " "))
+        if err != nil && len(outputs) == 0 {
+            outputs = append(outputs, fmt.Sprintf("%v", err))
         }
 
-        if len(output) == 0 {
+        if len(outputs) == 0 {
             return
         }
 
-        err = me.ReplyMessage(msg.Chat.ID, output)
-        if err != nil {
-            logger.Error(
-                fmt.Sprintf(
-                    "reply message to %d fail: \n\n%v",
-                    updateMsg.Message.Chat.ID,
-                    err,
-                ),
-            )
-            return
+        for _, output := range outputs {
+            err = me.ReplyMessage(msg.Chat.ID, output)
+
+            if err != nil {
+                if len(output) > 0 {
+                    me.ReplyMessage(
+                        msg.Chat.ID, 
+                        fmt.Sprintf("Failt reply message size %d", len(output)),
+                    )
+                }
+
+                logger.Error(
+                    fmt.Sprintf(
+                        "reply message to %d fail: \n\n%v\n\nOutput:\n%s",
+                        updateMsg.Message.Chat.ID,
+                        err,
+                        output,
+                    ),
+                )
+                return
+            }
         }
 	}
 }

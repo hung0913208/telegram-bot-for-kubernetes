@@ -9,6 +9,8 @@ import (
     "strconv"
     "os"
 
+	sentry "github.com/getsentry/sentry-go"
+
     "github.com/spf13/cobra"
 	"github.com/hung0913208/telegram-bot-for-kubernetes/lib/io"
 	"github.com/hung0913208/telegram-bot-for-kubernetes/lib/logs"
@@ -16,25 +18,37 @@ import (
 	"github.com/hung0913208/telegram-bot-for-kubernetes/lib/search"
 )
 
+
+var (
+    bizflyApi      map[string]bizfly.Api
+    globalTimeout  time.Duration
+)
+
 type toolboxImpl struct {
     io        io.Io
-    wg        *sync.WaitGroup
     timeout   time.Duration
+    wg        *sync.WaitGroup
     logger    logs.Logger
-    bizflyApi map[string]bizfly.Api
 }
 
-func NewToolbox(input string, output *string) Toolbox {
+func NewToolbox(input string, outputs *[]string) Toolbox {
+    if bizflyApi == nil {
+        bizflyApi = make(map[string]bizfly.Api)
+    }
+
     return &toolboxImpl{
-        io:        io.NewStringStream(input, output),
+        io:        io.NewStringStream(input, outputs),
         wg:        &sync.WaitGroup{},
         logger:    logs.NewLoggerWithStacktrace(),
-        bizflyApi: make(map[string]bizfly.Api),
     }
 }
 
 func (self *toolboxImpl) Init(timeout time.Duration) error {
-    self.timeout = timeout
+    if timeout > globalTimeout {
+        self.timeout = timeout
+    } else {
+        self.timeout = globalTimeout
+    }
 	return nil
 }
 
@@ -110,13 +124,28 @@ func (self *toolboxImpl) Execute(args []string) error {
 }
 
 func (self *toolboxImpl) GenerateSafeCallback(
+    name string,
     callback func(cmd *cobra.Command, args []string),
 ) func(cmd *cobra.Command, args []string) {
     return func(cmd *cobra.Command, args []string) {
         defer self.wg.Done()
         self.wg.Add(1)
 
-        callback(cmd, args)
+        if len(name) > 0 {
+            span := sentry.StartSpan(
+                context.Background(),
+                "toolbox",
+                sentry.TransactionName(name),
+            )
+
+            defer func() {
+                span.Finish()
+            }()
+
+            callback(cmd, args)
+        } else {
+            callback(cmd, args)
+        }
     }
 }
 
@@ -130,4 +159,8 @@ func (self *toolboxImpl) Fail(msg string) {
     if self.logger != nil {
         self.logger.Error(msg)
     }
+}
+
+func (self *toolboxImpl) Flush() {
+    self.io.Flush()
 }

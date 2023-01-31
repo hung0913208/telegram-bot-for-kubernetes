@@ -5,14 +5,16 @@ import (
 )
 
 type ioStringStreamImpl struct {
-    input  string
-    output *string
+    index   int 
+    input   string
+    outputs *[]string
 }
 
-func NewStringStream(input string, output *string) Io {
+func NewStringStream(input string, outputs *[]string) Io {
     return &ioStringStreamImpl{
-        input:  input,
-        output: output,
+        index:   len(*outputs) - 1,
+        input:   input,
+        outputs: outputs,
     }
 }
 
@@ -24,11 +26,26 @@ func (self *ioStringStreamImpl) Scan(
 }
 
 func (self *ioStringStreamImpl) Print(msg string) error {
-    *(self.output) += msg
+    if self.index < 0 {
+        *(self.outputs) = append(*(self.outputs), "")
+        self.index++
+    }
+
+    (*self.outputs)[self.index] += msg
     return nil
 }
 
 func (self *ioStringStreamImpl) Write(b []byte) (int, error) {
-    *(self.output) += string(b)
+    if self.index < 0 {
+        *(self.outputs) = append(*(self.outputs), "")
+        self.index++
+    }
+
+    (*self.outputs)[self.index] += string(b)
     return len(b), nil
+}
+
+func (self *ioStringStreamImpl) Flush() {
+    *(self.outputs) = append(*(self.outputs), "")
+    self.index++
 }

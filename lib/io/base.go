@@ -9,5 +9,6 @@ type Io interface {
 
     Scan(format string, args ...interface{}) (int, error)
     Print(msg string) error
+    Flush()
 }
 
