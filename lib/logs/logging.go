@@ -2,6 +2,7 @@ package logs
 
 import (
 	"errors"
+    "fmt"
 	"io"
 
 	sentry "github.com/getsentry/sentry-go"
@@ -24,6 +25,11 @@ type Logger interface {
 	Warn(msg string)
 	Error(msg string)
 	Fatal(msg string)
+
+	Infof(format string, data ...interface{})
+	Warnf(format string, data ...interface{})
+	Errorf(format string, data ...interface{})
+	Fatalf(format string, data ...interface{})
 }
 
 type loggerImpl struct {
@@ -109,3 +115,18 @@ func (self *loggerImpl) Write(b []byte) (int, error) {
     return len(b), nil
 }
 
+func (self *loggerImpl) Infof(format string, data ...interface{}) {
+    self.Info(fmt.Sprintf(format, data...))
+}
+
+func (self *loggerImpl) Warnf(format string, data ...interface{}) {
+    self.Warn(fmt.Sprintf(format, data...))
+}
+
+func (self *loggerImpl) Errorf(format string, data ...interface{}) {
+    self.Error(fmt.Sprintf(format, data...))
+}
+
+func (self *loggerImpl) Fatalf(format string, data ...interface{}) {
+    self.Fatal(fmt.Sprintf(format, data...))
+}

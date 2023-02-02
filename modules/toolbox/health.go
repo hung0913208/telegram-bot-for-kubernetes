@@ -15,8 +15,8 @@ func (self *toolboxImpl) newHealthParser() *cobra.Command {
         Use:   "health",
         Short: "Perform curl query to this API for validating performance",
         Run:   self.GenerateSafeCallback("", func(cmd *cobra.Command, args []string) {
-            if len(args) != 2 {
-                self.Fail(fmt.Sprintf("Expect 2 argument but got %d", len(args)))
+            if len(args) > 3 {
+                self.Fail(fmt.Sprintf("Expect no more than 3 argument but got %d", len(args)))
                 return
             }
 
