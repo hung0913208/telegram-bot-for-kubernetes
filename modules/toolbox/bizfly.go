@@ -1,6 +1,7 @@
 package toolbox
 
 import (
+    "encoding/json"
     "fmt"
 
     "github.com/spf13/cobra"
@@ -9,6 +10,7 @@ import (
 
 type BizflyToolbox interface {
     PrintAll(detail bool)
+    Billing()
 }
 
 type bizflyToolboxImpl struct {
@@ -21,6 +23,16 @@ func NewBizflyToolbox(toolbox *toolboxImpl, client bizfly.Api) BizflyToolbox {
         toolbox: toolbox,
         client:  client,
     }
+}
+
+func (self *bizflyToolboxImpl) Billing() {
+    user, err := self.client.GetUserInfo()
+    if err != nil {
+        self.toolbox.Fail(fmt.Sprintf("Fail with error %v", err))
+    }
+
+    out, _ := json.Marshal(user)
+    self.toolbox.Ok(fmt.Sprintf("Billing: %v", string(out)))
 }
 
 func (self *bizflyToolboxImpl) PrintAll(detail bool) {
@@ -219,6 +231,20 @@ func (self *toolboxImpl) newBizflyParser() *cobra.Command {
                 return
             }
         },
+    })
+
+    root.AddCommand(&cobra.Command{
+        Use:   "billing",
+        Short: "List resource for each account of bizfly",
+        Run:   self.GenerateSafeCallback(
+            "bizfly-billing",
+            func(cmd *cobra.Command, args []string) {
+                for _, client := range bizflyApi {
+                    bizflyToolbox := NewBizflyToolbox(self, client)
+                    bizflyToolbox.Billing()
+                }
+            },
+        ),
     })
 
     root.AddCommand(&cobra.Command{
