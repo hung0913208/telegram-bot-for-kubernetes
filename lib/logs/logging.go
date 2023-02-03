@@ -2,7 +2,7 @@ package logs
 
 import (
 	"errors"
-    "fmt"
+	"fmt"
 	"io"
 
 	sentry "github.com/getsentry/sentry-go"
@@ -40,45 +40,45 @@ type loggerImpl struct {
 var loggerUniqueObject *loggerImpl
 
 func NewLogger() Logger {
-    return &loggerImpl{}
+	return &loggerImpl{}
 }
 
 func NewLoggerWithStacktrace() Logger {
-    return  &loggerImpl{useStacktrace: true}
+	return &loggerImpl{useStacktrace: true}
 }
 
 func (self *loggerImpl) writeLog(msg string, level logTypeEnum) error {
 	event := sentry.NewEvent()
 
-    switch level {
-    case eLogInfo:
-	    event.Level = sentry.LevelInfo
-    case eLogError:
-	    event.Level = sentry.LevelError
-    case eLogWarning:
-	    event.Level = sentry.LevelWarning
-    }
+	switch level {
+	case eLogInfo:
+		event.Level = sentry.LevelInfo
+	case eLogError:
+		event.Level = sentry.LevelError
+	case eLogWarning:
+		event.Level = sentry.LevelWarning
+	}
 
 	switch level {
 	case eLogFatal:
-        err := sentry.CaptureException(errors.New(msg))
+		err := sentry.CaptureException(errors.New(msg))
 
-        if err != nil {
+		if err != nil {
 			panic(msg)
 		} else {
 			return errors.New("Please initize sentry first")
 		}
 
 	default:
-	    event.Message = msg
+		event.Message = msg
 
-	    if self.useStacktrace {
-	    	event.Threads = []sentry.Thread{{
-	    		Stacktrace: sentry.NewStacktrace(),
-	    		Crashed:    false,
-	    		Current:    true,
-	    	}}
-	    }
+		if self.useStacktrace {
+			event.Threads = []sentry.Thread{{
+				Stacktrace: sentry.NewStacktrace(),
+				Crashed:    false,
+				Current:    true,
+			}}
+		}
 
 		if sentry.CaptureEvent(event) != nil {
 			return nil
@@ -87,46 +87,46 @@ func (self *loggerImpl) writeLog(msg string, level logTypeEnum) error {
 		}
 	}
 
-    return errors.New("Crashing!!")
+	return errors.New("Crashing!!")
 }
 
 func (self *loggerImpl) Info(msg string) {
-    self.writeLog(msg, eLogInfo)
+	self.writeLog(msg, eLogInfo)
 }
 
 func (self *loggerImpl) Warn(msg string) {
-    self.writeLog(msg, eLogWarning)
+	self.writeLog(msg, eLogWarning)
 }
 
 func (self *loggerImpl) Error(msg string) {
-    self.writeLog(msg, eLogError)
+	self.writeLog(msg, eLogError)
 }
 
 func (self *loggerImpl) Fatal(msg string) {
-    self.writeLog(msg, eLogFatal)
+	self.writeLog(msg, eLogFatal)
 }
 
 func (self *loggerImpl) Write(b []byte) (int, error) {
-    err := self.writeLog(string(b), eLogInfo)
-    if err != nil {
-        return 0, err
-    }
+	err := self.writeLog(string(b), eLogInfo)
+	if err != nil {
+		return 0, err
+	}
 
-    return len(b), nil
+	return len(b), nil
 }
 
 func (self *loggerImpl) Infof(format string, data ...interface{}) {
-    self.Info(fmt.Sprintf(format, data...))
+	self.Info(fmt.Sprintf(format, data...))
 }
 
 func (self *loggerImpl) Warnf(format string, data ...interface{}) {
-    self.Warn(fmt.Sprintf(format, data...))
+	self.Warn(fmt.Sprintf(format, data...))
 }
 
 func (self *loggerImpl) Errorf(format string, data ...interface{}) {
-    self.Error(fmt.Sprintf(format, data...))
+	self.Error(fmt.Sprintf(format, data...))
 }
 
 func (self *loggerImpl) Fatalf(format string, data ...interface{}) {
-    self.Fatal(fmt.Sprintf(format, data...))
+	self.Fatal(fmt.Sprintf(format, data...))
 }

@@ -5,6 +5,5 @@ import (
 )
 
 type Toolbox interface {
-    container.Module
+	container.Module
 }
-

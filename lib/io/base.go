@@ -7,8 +7,7 @@ import (
 type Io interface {
 	io.Writer
 
-    Scan(format string, args ...interface{}) (int, error)
-    Print(msg string) error
-    Flush()
+	Scan(format string, args ...interface{}) (int, error)
+	Print(msg string) error
+	Flush()
 }
-
