@@ -7,6 +7,10 @@ import (
 	"time"
 
 	api "github.com/bizflycloud/gobizfly"
+	orm "gorm.io/gorm"
+
+    "github.com/hung0913208/telegram-bot-for-kubernetes/lib/db"
+    "github.com/hung0913208/telegram-bot-for-kubernetes/lib/container"
 )
 
 type Api interface {
@@ -28,12 +32,58 @@ type Api interface {
 type apiImpl struct {
 	ctx        context.Context
 	cancelFunc context.CancelFunc
+    dbConn     *orm.DB
 	token      *api.Token
 	client     *api.Client
 	region     string
 	username   string
 	password   string
 	projectId  string
+}
+
+func NewApiFromDatabase(host, region string, timeout time.Duration) ([]Api, error) {
+    dbModule, err := container.Pick("elephansql")
+    if err != nil {
+        return nil, err
+    }
+
+    dbConn, err := db.Establish(dbModule)
+    if err != nil {
+        return nil, err
+    }
+
+    ret := make([]Api, 0)
+    rows, err := dbConn.Model(&AccountModel{}).
+                        Rows()
+    if err != nil {
+        return nil, err
+    }
+
+    for rows.Next() {
+        var record AccountModel
+
+        err = dbConn.ScanRows(rows, &record)
+        if err != nil {
+            return nil, err
+        }
+       
+        client, err := newApiWithProjectIdAndUpdateDb(
+            host,
+            region,
+            record.Email,
+            record.Password,
+            record.ProjectId,
+            timeout,
+            false,
+        )
+        if err != nil {
+            return nil, err
+        }
+
+        (client.(*apiImpl)).dbConn = dbConn
+        ret = append(ret, client)
+    }
+	return ret, nil
 }
 
 func NewApi(
@@ -57,6 +107,24 @@ func NewApiWithProjectId(
 	username, password string,
 	timeout time.Duration,
 ) (Api, error) {
+    return newApiWithProjectIdAndUpdateDb(
+        host,
+        region,
+        projectId,
+        username, password,
+        timeout,
+        true,
+    )
+}
+
+func newApiWithProjectIdAndUpdateDb(
+	host string,
+	region string,
+	projectId string,
+	username, password string,
+	timeout time.Duration,
+    updateDb bool,
+) (Api, error) {
 	ctx, cancelFunc := context.WithTimeout(
 		context.Background(),
 		time.Millisecond*timeout,
@@ -77,6 +145,18 @@ func NewApiWithProjectId(
 		password:   password,
 		projectId:  projectId,
 	}
+
+    if updateDb {
+        dbModule, err := container.Pick("elephansql")
+        if err == nil {
+            dbConn, err := db.Establish(dbModule)
+            if err != nil {
+                return nil, err
+            }
+
+            wrapper.dbConn = dbConn
+        }
+    }
 
 	err = wrapper.SetToken()
 	if err != nil {
@@ -103,6 +183,39 @@ func (self *apiImpl) SetToken() error {
 	}
 
 	self.client.SetKeystoneToken(self.token)
+
+    if self.dbConn != nil {
+        user, err := self.GetUserInfo()
+        if err != nil {
+            return err
+        }
+
+        projectId := "default"
+        
+        if len(self.projectId) > 0 {
+            projectId = self.projectId
+        }
+
+        if len(user.BillingAccID) > 0 {
+            result := self.dbConn.FirstOrCreate(&AccountModel{
+                UUID:      fmt.Sprintf("%s-%s", user.BillingAccID, projectId),
+                Email:     self.username,
+                Password:  self.password,
+                ProjectId: self.projectId,
+            }, 
+            AccountModel{ UUID: "non_existing" })
+            return result.Error
+        } else {
+            result := self.dbConn.FirstOrCreate(&AccountModel{
+                UUID:      fmt.Sprintf("fakeid:%s-%s", self.username, projectId),
+                Email:     self.username,
+                Password:  self.password,
+                ProjectId: self.projectId,
+            },
+            AccountModel{ UUID: "non_existing" })
+            return result.Error
+        }
+    }
 	return nil
 }
 

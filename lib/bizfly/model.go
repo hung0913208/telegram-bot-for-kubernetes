@@ -5,7 +5,7 @@ import (
 )
 
 type BaseModel struct {
-	ID        string    `gorm:"primaryKey" json:"id"`
+    Id        int       `gorm:"autoIncrement" json:"id"`
 	CreatedAt time.Time `gorm:"autoCreateTime" json:"create_at"`
 	UpdatedAt time.Time `gorm:"autoUpdateTime" json:"update_at"`
 }
@@ -13,13 +13,14 @@ type BaseModel struct {
 type AccountModel struct {
 	BaseModel
 
+    UUID      string `gorm:"unique,index:idx_uuid" json:"uuid"`
 	Email     string `json:"email"`
 	Password  string `json:"password"`
 	ProjectId string `json:"project_id"`
 }
 
 func (AccountModel) TableName() string {
-	return "tbl_account"
+	return "tbl_bizfly_account"
 }
 
 type ClusterModel struct {
@@ -31,13 +32,17 @@ type ClusterModel struct {
 }
 
 func (ClusterModel) TableName() string {
-	return "tbl_cluster"
+	return "tbl_bizfly_cluster"
 }
 
 type ServerModel struct {
 	BaseModel
 
-	Status  string `gorm:"index:idx_status" json:"status"`
-	Cluster string `gorm:"index:idx_cluster_id" json:"cluster"`
-	Balance int    `json:"balance"`
+	Status     string `gorm:"index:idx_status" json:"status"`
+	Cluster    string `gorm:"index:idx_cluster_id" json:"cluster"`
+	Balance    int    `json:"balance"`
+}
+
+func (ServerModel) TableName() string {
+	return "tbl_bizfly_server"
 }
