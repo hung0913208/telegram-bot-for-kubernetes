@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+    "os"
+    "strconv"
 
 	api "github.com/bizflycloud/gobizfly"
 	orm "gorm.io/gorm"
@@ -52,12 +54,19 @@ func NewApiFromDatabase(host, region string, timeout time.Duration) ([]Api, erro
         return nil, err
     }
 
+    dbConn.Migrator().CreateTable(
+        &AccountModel{},
+        &ClusterModel{},
+        &ServerModel{},
+    )
+
     ret := make([]Api, 0)
     rows, err := dbConn.Model(&AccountModel{}).
                         Rows()
     if err != nil {
         return nil, err
     }
+    defer rows.Close()
 
     for rows.Next() {
         var record AccountModel
@@ -70,14 +79,19 @@ func NewApiFromDatabase(host, region string, timeout time.Duration) ([]Api, erro
         client, err := newApiWithProjectIdAndUpdateDb(
             host,
             region,
+            record.ProjectId,
             record.Email,
             record.Password,
-            record.ProjectId,
             timeout,
             false,
         )
         if err != nil {
-            return nil, err
+            return nil, fmt.Errorf(
+                "Login %s with password %s failt: %v", 
+                record.Email,
+                record.Password,
+                err,
+            )
         }
 
         (client.(*apiImpl)).dbConn = dbConn
@@ -203,7 +217,7 @@ func (self *apiImpl) SetToken() error {
                 Password:  self.password,
                 ProjectId: self.projectId,
             }, 
-            AccountModel{ UUID: "non_existing" })
+            AccountModel{ UUID: fmt.Sprintf("%s-%s", user.BillingAccID, projectId) })
             return result.Error
         } else {
             result := self.dbConn.FirstOrCreate(&AccountModel{
@@ -212,7 +226,7 @@ func (self *apiImpl) SetToken() error {
                 Password:  self.password,
                 ProjectId: self.projectId,
             },
-            AccountModel{ UUID: "non_existing" })
+            AccountModel{ UUID: fmt.Sprintf("fakeid:%s-%s", self.username, projectId) })
             return result.Error
         }
     }
@@ -272,42 +286,139 @@ func (self *apiImpl) GetKubeconfig(clusterId string) (string, error) {
 }
 
 func (self *apiImpl) ListCluster() ([]*api.Cluster, error) {
-	clusters, err := callBizflyApiWithMeasurement(
-		"list-kubernertes-engine",
-		func() (interface{}, error) {
-			return self.client.KubernetesEngine.List(self.ctx, nil)
-		},
-	)
+    return self.listClusterWithCache(true)
+}
 
-	if err != nil {
-		msg, bug := removeSvgBlock(fmt.Sprintf("%v", err))
-		if bug != nil {
-			panic(bug)
-		}
+func (self *apiImpl) listClusterWithCache(syncWithBizfly bool) ([]*api.Cluster, error) {
+    if syncWithBizfly {
+	    clusters, err := callBizflyApiWithMeasurement(
+	        "list-kubernertes-engine",
+	        func() (interface{}, error) {
+	            return self.client.KubernetesEngine.List(self.ctx, nil)
+	        },
+	    )
 
-		return nil, errors.New(msg)
-	}
+	    if err != nil {
+	        msg, bug := removeSvgBlock(fmt.Sprintf("%v", err))
+	        if bug != nil {
+	            panic(bug)
+	        }
 
-	return clusters.([]*api.Cluster), nil
+	        return nil, errors.New(msg)
+	    }
+
+        dbModule, err := container.Pick("elephansql")
+        if err == nil {
+            dbConn, err := db.Establish(dbModule)
+
+            if err == nil {
+                clusterRecords := make([]ClusterModel, 0)
+
+                for _, cluster := range (clusters.([]*api.Cluster)) {
+                    clusterRecords = append(clusterRecords, ClusterModel{
+                        UUID:    cluster.UID,
+                        Account: self.GetAccount(),
+                        Name:    cluster.Name,
+                        Status:  cluster.ProvisionStatus,
+                    })
+                }
+
+                batchSize, err := strconv.Atoi(os.Getenv("GORM_BATCH_SIZE"))
+                if err != nil {
+                    batchSize = 100
+                }
+
+                resp := dbConn.Model(ClusterModel{}).
+                        Where("account = ?", self.GetAccount()).
+                        Update("status", "Unknown")
+                if resp.Error != nil {
+                    return nil, resp.Error
+                }
+
+                resp = dbConn.CreateInBatches(clusterRecords, batchSize)
+	            return clusters.([]*api.Cluster), resp.Error
+            }
+        }
+
+    	return clusters.([]*api.Cluster), nil
+    } else {
+        clusters := make([]*api.Cluster, 0)
+        dbModule, err := container.Pick("elephansql")
+        if err != nil {
+            return nil, err
+        }
+        
+        dbConn, err := db.Establish(dbModule)
+        if err != nil {
+            return nil, err 
+        }
+
+        rows, err := dbConn.Model(&ClusterModel{}).
+                            Rows()
+        if err != nil {
+            return nil, err
+        }
+        defer rows.Close()
+
+        for rows.Next() {
+            var record ClusterModel
+
+            err = dbConn.ScanRows(rows, &record)
+            if err != nil {
+                return nil, err
+            }
+
+            clusters = append(clusters, &api.Cluster{
+                UID:             record.UUID,
+                Name:            record.Name,
+                ProvisionStatus: record.Status,
+            })
+        }
+
+        return clusters, nil
+    }
 }
 
 func (self *apiImpl) ListServer() ([]*api.Server, error) {
 	servers, err := callBizflyApiWithMeasurement(
-		"list-server",
-		func() (interface{}, error) {
-			return self.client.Server.List(self.ctx, &api.ServerListOptions{})
-		},
+        "list-server",
+        func() (interface{}, error) {
+            return self.client.Server.List(self.ctx, &api.ServerListOptions{})
+        },
 	)
 
 	if err != nil {
-		msg, bug := removeSvgBlock(fmt.Sprintf("%v", err))
-		if bug != nil {
-			panic(bug)
-		}
+        msg, bug := removeSvgBlock(fmt.Sprintf("%v", err))
+        if bug != nil {
+            panic(bug)
+        }
 
-		return nil, errors.New(msg)
+        return nil, errors.New(msg)
 	}
 
+    dbModule, err := container.Pick("elephansql")
+    if err == nil {
+        dbConn, err := db.Establish(dbModule)
+
+        if err == nil {
+            serverRecords := make([]ServerModel, 0)
+
+            for _, server := range (servers.([]*api.Server)) {
+                serverRecords = append(serverRecords, ServerModel{
+                    UUID:     server.ID,
+                    Status:   server.Status,
+                })
+            }
+
+            batchSize, err := strconv.Atoi(os.Getenv("GORM_BATCH_SIZE"))
+            if err != nil {
+                batchSize = 100
+            }
+
+            resp := dbConn.CreateInBatches(serverRecords, batchSize)
+	        return servers.([]*api.Server), resp.Error
+        }
+    }
 	return servers.([]*api.Server), nil
 }
 

@@ -29,13 +29,19 @@ const (
 	ErrorRegisterSql     = 5
 )
 
-var me telegram.Telegram
+var (
+    me      telegram.Telegram
+	input   string 
+	outputs []string
+)
 
 func init() {
 	timeout, err := strconv.Atoi(os.Getenv("TIMEOUT"))
 	if err != nil {
 		timeout = 200
 	}
+
+    outputs = make([]string, 0)
 
 	err = container.Init()
 	if err != nil {
@@ -86,6 +92,16 @@ func init() {
 		container.Terminate("Can't register module `elephansql`", ErrorRegisterSql)
 	}
 
+    err = container.RegisterSimpleModule(
+        "toolbox",
+        toolbox.NewToolbox(input, &outputs),
+        timeout,
+    )
+	if err != nil {
+        container.Terminate(fmt.Sprintf("Can't register module `toolbox`: %v", err),
+                            ErrorRegisterBot)
+	}
+
 	me = telegram.NewTelegram(os.Getenv("TELEGRAM_TOKEN"))
 
 	if len(os.Getenv("TELEGRAM_WEBHOOK")) > 0 {
@@ -105,14 +121,14 @@ func init() {
 func Handler(w http.ResponseWriter, r *http.Request) {
 	var msg *telegram.Message
 
-	timeout, err := strconv.Atoi(os.Getenv("TIMEOUT"))
-	if err != nil {
-		timeout = 200
-	}
-
 	if r.Method == "GET" {
 		return
 	}
+
+    bot, err := container.Pick("toolbox")
+    if err != nil {
+        return
+    }
 
 	logger := logs.NewLogger()
 	updateMsg, err := me.ParseIncomingRequest(r.Body)
@@ -164,11 +180,8 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	needAnswer := false
-	input := strings.Trim(msg.Text, " ")
-	outputs := make([]string, 0)
-	session := toolbox.NewToolbox(input, &outputs)
-
-	session.Init(time.Duration(timeout) * time.Millisecond)
+    input   = strings.Trim(msg.Text, " ")
+    outputs = make([]string, 0)
 
 	if msg.Chat.Type == "private" {
 		needAnswer = true
@@ -183,7 +196,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if needAnswer {
-		err = session.Execute(strings.Split(input, " "))
+		err = bot.Execute(strings.Split(input, " "))
 		if err != nil && len(outputs) == 0 {
 			outputs = append(outputs, fmt.Sprintf("%v", err))
 		}

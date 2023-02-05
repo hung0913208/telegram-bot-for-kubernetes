@@ -26,6 +26,10 @@ func (self *ioStringStreamImpl) Scan(
 }
 
 func (self *ioStringStreamImpl) Print(msg string) error {
+    if self.index + 1 >= len(*(self.outputs)) {
+        self.index = len(*(self.outputs)) - 1
+    }
+
 	if self.index < 0 {
 		*(self.outputs) = append(*(self.outputs), "")
 		self.index++
@@ -36,6 +40,10 @@ func (self *ioStringStreamImpl) Print(msg string) error {
 }
 
 func (self *ioStringStreamImpl) Write(b []byte) (int, error) {
+    if self.index + 1 >= len(*(self.outputs)) {
+        self.index = len(*(self.outputs)) - 1
+    }
+
 	if self.index < 0 {
 		*(self.outputs) = append(*(self.outputs), "")
 		self.index++
@@ -46,6 +54,11 @@ func (self *ioStringStreamImpl) Write(b []byte) (int, error) {
 }
 
 func (self *ioStringStreamImpl) Flush() {
+    if self.index + 1 >= len(*(self.outputs)) {
+        self.index = len(*(self.outputs)) - 1
+    }
+
 	*(self.outputs) = append(*(self.outputs), "")
 	self.index++
 }
+

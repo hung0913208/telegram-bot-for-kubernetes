@@ -73,3 +73,4 @@ func Establish(module container.Module) (*gorm.DB, error) {
 	}
 	return nil, errors.New("Can't cast module to database module")
 }
+

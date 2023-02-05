@@ -4,12 +4,14 @@
 # @created     : Wednesday Jan 25, 2023 17:12:42 +07
 ######################################################################
 
+GO := go
+
 all: build test
 
 build:
-	go mod tidy
-	go build -v ./...
+	@-$(GO) mod tidy
+	@-$(GO) build -v ./...
 
 test:
-	go mod tidy
-	go test -v ./test/...
+	@-$(GO) go mod tidy
+	@-$(GO) go test -v ./test/...

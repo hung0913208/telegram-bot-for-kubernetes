@@ -26,8 +26,10 @@ func (AccountModel) TableName() string {
 type ClusterModel struct {
 	BaseModel
 
+    UUID    string `gorm:"unique,index:idx_uuid" json:"uuid"`
 	Account string `gorm:"index:idx_account_id" json:"account"`
 	Name    string `gorm:"index:idx_name" json:"name"`
+    Status  string `json: "status"`
 	Balance int    `json:"balance"`
 }
 
@@ -38,9 +40,10 @@ func (ClusterModel) TableName() string {
 type ServerModel struct {
 	BaseModel
 
-	Status     string `gorm:"index:idx_status" json:"status"`
-	Cluster    string `gorm:"index:idx_cluster_id" json:"cluster"`
-	Balance    int    `json:"balance"`
+    UUID    string `gorm:"unique,index:idx_uuid" json:"uuid"`
+	Status  string `gorm:"index:idx_status" json:"status"`
+	Cluster string `gorm:"index:idx_cluster_id" json:"cluster"`
+	Balance int    `json:"balance"`
 }
 
 func (ServerModel) TableName() string {

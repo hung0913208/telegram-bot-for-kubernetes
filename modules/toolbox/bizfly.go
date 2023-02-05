@@ -2,6 +2,7 @@ package toolbox
 
 import (
 	"encoding/json"
+    "time"
 	"fmt"
 
 	"github.com/hung0913208/telegram-bot-for-kubernetes/lib/bizfly"
@@ -9,141 +10,177 @@ import (
 )
 
 type BizflyToolbox interface {
+    Login(
+        host, region, project, username, password string,
+        timeout time.Duration,
+    )
 	PrintAll(detail bool)
 	Billing()
 }
 
 type bizflyToolboxImpl struct {
 	toolbox *toolboxImpl
-	client  bizfly.Api
 }
 
-func NewBizflyToolbox(toolbox *toolboxImpl, client bizfly.Api) BizflyToolbox {
+func newBizflyToolbox(toolbox *toolboxImpl) BizflyToolbox {
 	return &bizflyToolboxImpl{
 		toolbox: toolbox,
-		client:  client,
+	}
+}
+
+
+func (self *bizflyToolboxImpl) Login(
+    host, region, project, username, password string,
+    timeout time.Duration,
+) {
+	client, err := bizfly.NewApiWithProjectId(
+		host,
+		region,
+		project,
+		username,
+		password,
+		timeout,
+	)
+	if err != nil {
+		self.toolbox.Fail(fmt.Sprintf("bizfly login fail: \n%v", err))
+		return
+	}
+
+	self.toolbox.bizflyApi[username] = client
+	if len(project) > 0 {
+		self.toolbox.Ok(fmt.Sprintf("login %s, project %s, success", username, project))
+	} else {
+		self.toolbox.Ok(fmt.Sprintf("login %s success", username))
 	}
 }
 
 func (self *bizflyToolboxImpl) Billing() {
-	user, err := self.client.GetUserInfo()
-	if err != nil {
-		self.toolbox.Fail(fmt.Sprintf("Fail with error %v", err))
-	}
+    for name, client := range self.toolbox.bizflyApi {
+	    user, err := client.GetUserInfo()
+	    if err != nil {
+	    	self.toolbox.Fail(fmt.Sprintf("Fail with error %v", err))
+	    }
 
-	out, _ := json.Marshal(user)
-	self.toolbox.Ok(fmt.Sprintf("Billing: %v", string(out)))
+        self.toolbox.Ok(fmt.Sprintf("Billing of %s", name))
+
+	    out, _ := json.Marshal(user)
+	    self.toolbox.Ok(fmt.Sprintf("Billing: %v", string(out)))
+    }
 }
 
 func (self *bizflyToolboxImpl) PrintAll(detail bool) {
-	clusters, err := self.client.ListCluster()
-	if err != nil {
-		self.toolbox.Fail(fmt.Sprintf("Fail fetching clusters of %s: %v", self.client.GetAccount(), err))
-	}
+    for name, client := range self.toolbox.bizflyApi {
+        self.toolbox.Ok(fmt.Sprintf("Detail info of %s", name))
 
-	if len(clusters) > 0 {
-		self.toolbox.Ok("List clusters:\n")
+	    volumes, err := client.ListVolume()
+	    if err != nil {
+	    	self.toolbox.Fail(fmt.Sprintf("Fail fetching firewalls of %s: %v", client.GetAccount(), err))
+	    }
 
-		for _, cluster := range clusters {
-			self.toolbox.Ok(fmt.Sprintf(
-				" + %s - %s - %s - %v",
-				cluster.UID,
-				cluster.Name,
-				cluster.ClusterStatus,
-				cluster.Tags,
-			))
-		}
+	    servers, err := client.ListServer()
+	    if err != nil {
+	    	self.toolbox.Fail(fmt.Sprintf("Fail fetching servers of %s: %v", client.GetAccount(), err))
+	    }
 
-		self.toolbox.Flush()
-	}
+	    clusters, err := client.ListCluster()
+	    if err != nil {
+	    	self.toolbox.Fail(fmt.Sprintf("Fail fetching clusters of %s: %v", client.GetAccount(), err))
+	    }
 
-	servers, err := self.client.ListServer()
-	if err != nil {
-		self.toolbox.Fail(fmt.Sprintf("Fail fetching servers of %s: %v", self.client.GetAccount(), err))
-	}
+	    if len(clusters) > 0 {
+	    	self.toolbox.Ok("List clusters:\n")
 
-	if len(servers) > 0 {
-		self.toolbox.Ok("List servers:\n")
+	    	for _, cluster := range clusters {
+	    		self.toolbox.Ok(fmt.Sprintf(
+	    			" + %s - %s - %s - %v",
+	    			cluster.UID,
+	    			cluster.Name,
+	    			cluster.ClusterStatus,
+	    			cluster.Tags,
+	    		))
+	    	}
 
-		for _, server := range servers {
-			self.toolbox.Ok(fmt.Sprintf(
-				" + %s - %s - %s",
-				server.ID,
-				server.Name,
-				server.Status,
-			))
+	    	self.toolbox.Flush()
+	    }
 
-			if detail {
-				for _, vol := range server.AttachedVolumes {
-					self.toolbox.Ok(fmt.Sprintf(
-						"   \\-> %s - %s",
-						vol.ID,
-						vol.Type,
-					))
-				}
-			}
-		}
-		self.toolbox.Flush()
-	}
+	    if len(servers) > 0 {
+	    	self.toolbox.Ok("List servers:\n")
 
-	volumes, err := self.client.ListVolume()
-	if err != nil {
-		self.toolbox.Fail(fmt.Sprintf("Fail fetching firewalls of %s: %v", self.client.GetAccount(), err))
-	}
+	    	for _, server := range servers {
+	    		self.toolbox.Ok(fmt.Sprintf(
+	    			" + %s - %s - %s",
+	    			server.ID,
+	    			server.Name,
+	    			server.Status,
+	    		))
 
-	if len(volumes) > 0 {
-		self.toolbox.Ok("List volumes:\n")
+	    		if detail {
+	    			for _, vol := range server.AttachedVolumes {
+	    				self.toolbox.Ok(fmt.Sprintf(
+	    					"   \\-> %s - %s",
+	    					vol.ID,
+	    					vol.Type,
+	    				))
+	    			}
+	    		}
+	    	}
+	    	self.toolbox.Flush()
+	    }
 
-		for _, vol := range volumes {
-			self.toolbox.Ok(fmt.Sprintf(
-				" + %s - %v - %v",
-				vol.ID,
-				vol.Status,
-				vol.VolumeType,
-			))
-		}
-		self.toolbox.Flush()
-	}
+	    if len(volumes) > 0 {
+	    	self.toolbox.Ok("List volumes:\n")
 
-	if detail {
-		firewalls, err := self.client.ListFirewall()
+	    	for _, vol := range volumes {
+	    		self.toolbox.Ok(fmt.Sprintf(
+	    			" + %s - %v - %v",
+	    			vol.ID,
+	    			vol.Status,
+	    			vol.VolumeType,
+	    		))
+	    	}
+	    	self.toolbox.Flush()
+	    }
 
-		if err != nil {
-			self.toolbox.Fail(fmt.Sprintf("Fail fetching firewalls of %s: %v", self.client.GetAccount(), err))
-		}
+	    if detail {
+	    	firewalls, err := client.ListFirewall()
 
-		if len(firewalls) > 0 {
-			self.toolbox.Ok("List firewalls:\n")
+	    	if err != nil {
+	    		self.toolbox.Fail(fmt.Sprintf("Fail fetching firewalls of %s: %v", client.GetAccount(), err))
+	    	}
 
-			for _, firewall := range firewalls {
-				self.toolbox.Ok(fmt.Sprintf(
-					" + %s - %v",
-					firewall.ID,
-					firewall.Tags,
-				))
+	    	if len(firewalls) > 0 {
+	    		self.toolbox.Ok("List firewalls:\n")
 
-				for _, inbound := range firewall.InBound {
-					self.toolbox.Ok(fmt.Sprintf(
-						"   >>> %s - %s : { %s }",
-						inbound.ID,
-						inbound.Tags,
-						inbound.CIDR,
-						inbound.PortRange,
-					))
-				}
+	    		for _, firewall := range firewalls {
+	    			self.toolbox.Ok(fmt.Sprintf(
+	    				" + %s - %v",
+	    				firewall.ID,
+	    				firewall.Tags,
+	    			))
 
-				for _, outbound := range firewall.InBound {
-					self.toolbox.Ok(fmt.Sprintf(
-						"   <<< %s - %s : { %s }",
-						outbound.ID,
-						outbound.CIDR,
-						outbound.PortRange,
-					))
-				}
-			}
-			self.toolbox.Flush()
-		}
-	}
+	    			for _, inbound := range firewall.InBound {
+	    				self.toolbox.Ok(fmt.Sprintf(
+	    					"   >>> %s - %s : { %s }",
+	    					inbound.ID,
+	    					inbound.Tags,
+	    					inbound.CIDR,
+	    					inbound.PortRange,
+	    				))
+	    			}
+
+	    			for _, outbound := range firewall.InBound {
+	    				self.toolbox.Ok(fmt.Sprintf(
+	    					"   <<< %s - %s : { %s }",
+	    					outbound.ID,
+	    					outbound.CIDR,
+	    					outbound.PortRange,
+	    				))
+	    			}
+	    		}
+	    		self.toolbox.Flush()
+	    	}
+	    }
+    }
 }
 
 func (self *toolboxImpl) newBizflyParser() *cobra.Command {
@@ -187,25 +224,15 @@ func (self *toolboxImpl) newBizflyParser() *cobra.Command {
 					return
 				}
 
-				client, err := bizfly.NewApiWithProjectId(
-					host,
-					region,
-					project,
-					username,
-					password,
-					self.timeout,
-				)
-				if err != nil {
-					self.Fail(fmt.Sprintf("bizfly login fail: \n%v", err))
-					return
-				}
-
-				bizflyApi[username] = client
-				if len(project) > 0 {
-					self.Ok(fmt.Sprintf("login %s, project %s, success", username, project))
-				} else {
-					self.Ok(fmt.Sprintf("login %s success", username))
-				}
+                newBizflyToolbox(self).
+                    Login(
+                        host,
+                        region,
+                        project,
+                        username,
+                        password,
+                        self.timeout,
+                    )
 			},
 		),
 	}
@@ -239,10 +266,7 @@ func (self *toolboxImpl) newBizflyParser() *cobra.Command {
 		Run: self.GenerateSafeCallback(
 			"bizfly-billing",
 			func(cmd *cobra.Command, args []string) {
-				for _, client := range bizflyApi {
-					bizflyToolbox := NewBizflyToolbox(self, client)
-					bizflyToolbox.Billing()
-				}
+				newBizflyToolbox(self).Billing()
 			},
 		),
 	})
@@ -253,34 +277,7 @@ func (self *toolboxImpl) newBizflyParser() *cobra.Command {
 		Run: self.GenerateSafeCallback(
 			"bizfly-all",
 			func(cmd *cobra.Command, args []string) {
-				if len(bizflyApi) == 0 {
-					self.Fail("Please login bizfly before doing anything")
-				}
-
-				for username, client := range bizflyApi {
-					bizflyToolbox := NewBizflyToolbox(self, client)
-
-					self.Ok(fmt.Sprintf("List resource of %s", username))
-					bizflyToolbox.PrintAll(false)
-				}
-			},
-		),
-	})
-
-	root.AddCommand(&cobra.Command{
-		Use:   "logout",
-		Short: "Logout the bizfly account",
-		Long: "Logout and remove cache and resource for dedicated account:\n\n" +
-			"sre bizfly logout <email>",
-		Run: self.GenerateSafeCallback(
-			"bizfly-logout",
-			func(cmd *cobra.Command, args []string) {
-				if len(args) != 1 {
-					self.Fail(fmt.Sprintf("Expect 1 argument but got %d", len(args)))
-					return
-				}
-
-				delete(bizflyApi, args[0])
+				newBizflyToolbox(self).PrintAll(false)
 			},
 		),
 	})
