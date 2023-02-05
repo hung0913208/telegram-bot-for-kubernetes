@@ -1,21 +1,21 @@
 package toolbox
 
 import (
-	"strconv"
+	"fmt"
 	"os"
-    "fmt"
-    "time"
+	"strconv"
+	"time"
 
-    "gorm.io/gorm/clause"
+	"gorm.io/gorm/clause"
 
+	"github.com/hung0913208/telegram-bot-for-kubernetes/lib/container"
+	"github.com/hung0913208/telegram-bot-for-kubernetes/lib/db"
 	"github.com/spf13/cobra"
-    "github.com/hung0913208/telegram-bot-for-kubernetes/lib/db"
-    "github.com/hung0913208/telegram-bot-for-kubernetes/lib/container"
 )
 
 type SettingToolbox interface {
-    SetTimeout(timeout string)
-    GetTimeout()
+	SetTimeout(timeout string)
+	GetTimeout()
 }
 
 type settingToolboxImpl struct {
@@ -23,9 +23,9 @@ type settingToolboxImpl struct {
 }
 
 func newSettingToolbox(toolbox *toolboxImpl) SettingToolbox {
-    return &settingToolboxImpl{
-        toolbox: toolbox,
-    }
+	return &settingToolboxImpl{
+		toolbox: toolbox,
+	}
 }
 
 func (self *settingToolboxImpl) GetTimeout() {
@@ -36,39 +36,39 @@ func (self *settingToolboxImpl) GetTimeout() {
 }
 
 func (self *settingToolboxImpl) SetTimeout(timeout string) {
-    val, err := strconv.Atoi(timeout)
-    if err != nil {
-    	self.toolbox.Fail(fmt.Sprintf("Can't accept value %s as timeout", timeout))
-        return
-    }
+	val, err := strconv.Atoi(timeout)
+	if err != nil {
+		self.toolbox.Fail(fmt.Sprintf("Can't accept value %s as timeout", timeout))
+		return
+	}
 
-    dbModule, err := container.Pick("elephansql")
-    if err != nil {
-        self.toolbox.Fail(fmt.Sprintf("Fail get elephansql: %v", err))
-		return 
-    }
+	dbModule, err := container.Pick("elephansql")
+	if err != nil {
+		self.toolbox.Fail(fmt.Sprintf("Fail get elephansql: %v", err))
+		return
+	}
 
-    dbConn, err := db.Establish(dbModule)
-    if err != nil {
+	dbConn, err := db.Establish(dbModule)
+	if err != nil {
 		self.toolbox.Fail(fmt.Sprintf("Fail establish gorm: %v", err))
-        return
-    }
+		return
+	}
 
-    setting := SettingModel{
-        Name:  "timeout",
-        Type:  1,
-        Value: timeout,
-    }
+	setting := SettingModel{
+		Name:  "timeout",
+		Type:  1,
+		Value: timeout,
+	}
 
-    // @NOTE: update on conflict, improve performance while keep
-    //        everything safe
-    dbConn.Clauses(clause.OnConflict{
-        Columns:   []clause.Column{{Name: "name"}},
-        DoUpdates: clause.AssignmentColumns([]string{"value"}),
-    }).Create(&setting)
+	// @NOTE: update on conflict, improve performance while keep
+	//        everything safe
+	dbConn.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "name"}},
+		DoUpdates: clause.AssignmentColumns([]string{"value"}),
+	}).Create(&setting)
 
-    // @NOTE: save for future
-    self.toolbox.timeout = time.Duration(val) * time.Millisecond
+	// @NOTE: save for future
+	self.toolbox.timeout = time.Duration(val) * time.Millisecond
 }
 
 func (self *toolboxImpl) newSettingParser() *cobra.Command {
@@ -101,11 +101,11 @@ func (self *toolboxImpl) newSettingParser() *cobra.Command {
 			"setting-timeout",
 			func(cmd *cobra.Command, args []string) {
 				if len(args) == 0 {
-                    newSettingToolbox(self).GetTimeout()
-                    return
-                }
+					newSettingToolbox(self).GetTimeout()
+					return
+				}
 
-                newSettingToolbox(self).SetTimeout(args[0])
+				newSettingToolbox(self).SetTimeout(args[0])
 			},
 		),
 	})

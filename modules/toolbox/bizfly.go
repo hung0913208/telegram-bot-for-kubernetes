@@ -2,19 +2,21 @@ package toolbox
 
 import (
 	"encoding/json"
-    "time"
 	"fmt"
+	"time"
 
 	"github.com/hung0913208/telegram-bot-for-kubernetes/lib/bizfly"
+	"github.com/hung0913208/telegram-bot-for-kubernetes/modules/cluster"
 	"github.com/spf13/cobra"
 )
 
 type BizflyToolbox interface {
-    Login(
-        host, region, project, username, password string,
-        timeout time.Duration,
-    )
+	Login(
+		host, region, project, username, password string,
+		timeout time.Duration,
+	)
 	PrintAll(detail bool)
+	Sync(account string)
 	Billing()
 }
 
@@ -28,10 +30,9 @@ func newBizflyToolbox(toolbox *toolboxImpl) BizflyToolbox {
 	}
 }
 
-
 func (self *bizflyToolboxImpl) Login(
-    host, region, project, username, password string,
-    timeout time.Duration,
+	host, region, project, username, password string,
+	timeout time.Duration,
 ) {
 	client, err := bizfly.NewApiWithProjectId(
 		host,
@@ -47,140 +48,170 @@ func (self *bizflyToolboxImpl) Login(
 	}
 
 	self.toolbox.bizflyApi[username] = client
+
 	if len(project) > 0 {
-		self.toolbox.Ok(fmt.Sprintf("login %s, project %s, success", username, project))
+		self.toolbox.Ok("login %s, project %s, success", username, project)
 	} else {
-		self.toolbox.Ok(fmt.Sprintf("login %s success", username))
+		self.toolbox.Ok("login %s success", username)
 	}
 }
 
 func (self *bizflyToolboxImpl) Billing() {
-    for name, client := range self.toolbox.bizflyApi {
-	    user, err := client.GetUserInfo()
-	    if err != nil {
-	    	self.toolbox.Fail(fmt.Sprintf("Fail with error %v", err))
-	    }
+	for name, client := range self.toolbox.bizflyApi {
+		user, err := client.GetUserInfo()
+		if err != nil {
+			self.toolbox.Fail(fmt.Sprintf("Fail with error %v", err))
+		}
 
-        self.toolbox.Ok(fmt.Sprintf("Billing of %s", name))
+		self.toolbox.Ok(fmt.Sprintf("Billing of %s", name))
 
-	    out, _ := json.Marshal(user)
-	    self.toolbox.Ok(fmt.Sprintf("Billing: %v", string(out)))
-    }
+		out, _ := json.Marshal(user)
+		self.toolbox.Ok(fmt.Sprintf("Billing: %v", string(out)))
+	}
+}
+
+func (self *bizflyToolboxImpl) Sync(account string) {
+	client, ok := self.toolbox.bizflyApi[account]
+	if !ok {
+		self.toolbox.Fail(fmt.Sprintf("Unknown %s", account))
+		return
+	}
+
+	clusters, err := client.ListCluster()
+	if err != nil {
+		self.toolbox.Fail(fmt.Sprintf("Can't get list clusters: %v", err))
+		return
+	}
+
+	for _, clusterObj := range clusters {
+		tenant, err := bizfly.NewTenant(
+			client,
+			clusterObj,
+		)
+		if err != nil {
+			self.toolbox.Fail("Can't init cluster %s: %v", clusterObj.UID, err)
+			continue
+		}
+
+		err = cluster.Join(tenant)
+		if err != nil {
+			self.toolbox.Fail("Can't join %s: %v", clusterObj.UID, err)
+		}
+	}
 }
 
 func (self *bizflyToolboxImpl) PrintAll(detail bool) {
-    for name, client := range self.toolbox.bizflyApi {
-        self.toolbox.Ok(fmt.Sprintf("Detail info of %s", name))
+	for name, client := range self.toolbox.bizflyApi {
+		self.toolbox.Ok(fmt.Sprintf("Detail info of %s", name))
 
-	    volumes, err := client.ListVolume()
-	    if err != nil {
-	    	self.toolbox.Fail(fmt.Sprintf("Fail fetching firewalls of %s: %v", client.GetAccount(), err))
-	    }
+		volumes, err := client.ListVolume()
+		if err != nil {
+			self.toolbox.Fail(fmt.Sprintf("Fail fetching firewalls of %s: %v", client.GetAccount(), err))
+		}
 
-	    servers, err := client.ListServer()
-	    if err != nil {
-	    	self.toolbox.Fail(fmt.Sprintf("Fail fetching servers of %s: %v", client.GetAccount(), err))
-	    }
+		servers, err := client.ListServer()
+		if err != nil {
+			self.toolbox.Fail(fmt.Sprintf("Fail fetching servers of %s: %v", client.GetAccount(), err))
+		}
 
-	    clusters, err := client.ListCluster()
-	    if err != nil {
-	    	self.toolbox.Fail(fmt.Sprintf("Fail fetching clusters of %s: %v", client.GetAccount(), err))
-	    }
+		clusters, err := client.ListCluster()
+		if err != nil {
+			self.toolbox.Fail(fmt.Sprintf("Fail fetching clusters of %s: %v", client.GetAccount(), err))
+		}
 
-	    if len(clusters) > 0 {
-	    	self.toolbox.Ok("List clusters:\n")
+		if len(clusters) > 0 {
+			self.toolbox.Ok("List clusters:\n")
 
-	    	for _, cluster := range clusters {
-	    		self.toolbox.Ok(fmt.Sprintf(
-	    			" + %s - %s - %s - %v",
-	    			cluster.UID,
-	    			cluster.Name,
-	    			cluster.ClusterStatus,
-	    			cluster.Tags,
-	    		))
-	    	}
+			for _, cluster := range clusters {
+				self.toolbox.Ok(fmt.Sprintf(
+					" + %s - %s - %s - %v",
+					cluster.UID,
+					cluster.Name,
+					cluster.ClusterStatus,
+					cluster.Tags,
+				))
+			}
 
-	    	self.toolbox.Flush()
-	    }
+			self.toolbox.Flush()
+		}
 
-	    if len(servers) > 0 {
-	    	self.toolbox.Ok("List servers:\n")
+		if len(servers) > 0 {
+			self.toolbox.Ok("List servers:\n")
 
-	    	for _, server := range servers {
-	    		self.toolbox.Ok(fmt.Sprintf(
-	    			" + %s - %s - %s",
-	    			server.ID,
-	    			server.Name,
-	    			server.Status,
-	    		))
+			for _, server := range servers {
+				self.toolbox.Ok(fmt.Sprintf(
+					" + %s - %s - %s",
+					server.ID,
+					server.Name,
+					server.Status,
+				))
 
-	    		if detail {
-	    			for _, vol := range server.AttachedVolumes {
-	    				self.toolbox.Ok(fmt.Sprintf(
-	    					"   \\-> %s - %s",
-	    					vol.ID,
-	    					vol.Type,
-	    				))
-	    			}
-	    		}
-	    	}
-	    	self.toolbox.Flush()
-	    }
+				if detail {
+					for _, vol := range server.AttachedVolumes {
+						self.toolbox.Ok(fmt.Sprintf(
+							"   \\-> %s - %s",
+							vol.ID,
+							vol.Type,
+						))
+					}
+				}
+			}
+			self.toolbox.Flush()
+		}
 
-	    if len(volumes) > 0 {
-	    	self.toolbox.Ok("List volumes:\n")
+		if len(volumes) > 0 {
+			self.toolbox.Ok("List volumes:\n")
 
-	    	for _, vol := range volumes {
-	    		self.toolbox.Ok(fmt.Sprintf(
-	    			" + %s - %v - %v",
-	    			vol.ID,
-	    			vol.Status,
-	    			vol.VolumeType,
-	    		))
-	    	}
-	    	self.toolbox.Flush()
-	    }
+			for _, vol := range volumes {
+				self.toolbox.Ok(fmt.Sprintf(
+					" + %s - %v - %v",
+					vol.ID,
+					vol.Status,
+					vol.VolumeType,
+				))
+			}
+			self.toolbox.Flush()
+		}
 
-	    if detail {
-	    	firewalls, err := client.ListFirewall()
+		if detail {
+			firewalls, err := client.ListFirewall()
 
-	    	if err != nil {
-	    		self.toolbox.Fail(fmt.Sprintf("Fail fetching firewalls of %s: %v", client.GetAccount(), err))
-	    	}
+			if err != nil {
+				self.toolbox.Fail(fmt.Sprintf("Fail fetching firewalls of %s: %v", client.GetAccount(), err))
+			}
 
-	    	if len(firewalls) > 0 {
-	    		self.toolbox.Ok("List firewalls:\n")
+			if len(firewalls) > 0 {
+				self.toolbox.Ok("List firewalls:\n")
 
-	    		for _, firewall := range firewalls {
-	    			self.toolbox.Ok(fmt.Sprintf(
-	    				" + %s - %v",
-	    				firewall.ID,
-	    				firewall.Tags,
-	    			))
+				for _, firewall := range firewalls {
+					self.toolbox.Ok(fmt.Sprintf(
+						" + %s - %v",
+						firewall.ID,
+						firewall.Tags,
+					))
 
-	    			for _, inbound := range firewall.InBound {
-	    				self.toolbox.Ok(fmt.Sprintf(
-	    					"   >>> %s - %s : { %s }",
-	    					inbound.ID,
-	    					inbound.Tags,
-	    					inbound.CIDR,
-	    					inbound.PortRange,
-	    				))
-	    			}
+					for _, inbound := range firewall.InBound {
+						self.toolbox.Ok(fmt.Sprintf(
+							"   >>> %s - %s : { %s }",
+							inbound.ID,
+							inbound.Tags,
+							inbound.CIDR,
+						))
+					}
 
-	    			for _, outbound := range firewall.InBound {
-	    				self.toolbox.Ok(fmt.Sprintf(
-	    					"   <<< %s - %s : { %s }",
-	    					outbound.ID,
-	    					outbound.CIDR,
-	    					outbound.PortRange,
-	    				))
-	    			}
-	    		}
-	    		self.toolbox.Flush()
-	    	}
-	    }
-    }
+					for _, outbound := range firewall.InBound {
+						self.toolbox.Ok(fmt.Sprintf(
+							"   <<< %s - %s : { %s }",
+							outbound.ID,
+							outbound.CIDR,
+							outbound.PortRange,
+						))
+					}
+				}
+				self.toolbox.Flush()
+			}
+		}
+	}
 }
 
 func (self *toolboxImpl) newBizflyParser() *cobra.Command {
@@ -224,15 +255,15 @@ func (self *toolboxImpl) newBizflyParser() *cobra.Command {
 					return
 				}
 
-                newBizflyToolbox(self).
-                    Login(
-                        host,
-                        region,
-                        project,
-                        username,
-                        password,
-                        self.timeout,
-                    )
+				newBizflyToolbox(self).
+					Login(
+						host,
+						region,
+						project,
+						username,
+						password,
+						self.timeout,
+					)
 			},
 		),
 	}
@@ -282,6 +313,16 @@ func (self *toolboxImpl) newBizflyParser() *cobra.Command {
 		),
 	})
 
+	root.AddCommand(&cobra.Command{
+		Use:   "sync",
+		Short: "List resource for each account of bizfly",
+		Run: self.GenerateSafeCallback(
+			"bizfly-sync",
+			func(cmd *cobra.Command, args []string) {
+				newBizflyToolbox(self).Sync(args[0])
+			},
+		),
+	})
 	root.AddCommand(bizflyLogin)
 	return root
 }

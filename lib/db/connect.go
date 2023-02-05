@@ -1,7 +1,7 @@
 package db
 
 import (
-    "context"
+	"context"
 	"fmt"
 	"time"
 
@@ -20,19 +20,19 @@ type Db interface {
 }
 
 type dbImpl struct {
-	dbConn *gorm.DB
-    dialector gorm.Dialector
+	dbConn    *gorm.DB
+	dialector gorm.Dialector
 
 	host, username, password string
 	port                     int
 }
 
 type dialectorProxyImpl struct {
-    dialector gorm.Dialector
+	dialector gorm.Dialector
 }
 
 var (
-    _ gorm.Dialector = &dialectorProxyImpl{}
+	_ gorm.Dialector = &dialectorProxyImpl{}
 )
 
 func NewMysql(
@@ -52,9 +52,9 @@ func NewMysql(
 
 	mysqlConn := mysql.Open(
 		fmt.Sprintf(
-            "%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&" +
-            "loc=Local&" +
-            "interpolateParams=true",
+			"%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&"+
+				"loc=Local&"+
+				"interpolateParams=true",
 			username, password,
 			host, port,
 			database,
@@ -63,16 +63,16 @@ func NewMysql(
 
 	dbConn, err := gorm.Open(
 		&dialectorProxyImpl{
-            dialector: mysqlConn,
-        },
+			dialector: mysqlConn,
+		},
 		&gorm.Config{
 			// @NOTE: most of the case we don't need transaction since we will
 			//        handle everything manually so don't need to
 			SkipDefaultTransaction: true,
 
-            // @NOTE: cache prepared statement so the future queries might be
-            //        speed up
-            PrepareStmt: true,
+			// @NOTE: cache prepared statement so the future queries might be
+			//        speed up
+			PrepareStmt: true,
 
 			// @NOTE: configure logger
 			Logger: newLogger,
@@ -85,7 +85,7 @@ func NewMysql(
 
 	return &dbImpl{
 		dbConn:    dbConn,
-        dialector: mysqlConn,
+		dialector: mysqlConn,
 	}, nil
 }
 
@@ -116,16 +116,16 @@ func NewPg(
 
 	dbConn, err := gorm.Open(
 		&dialectorProxyImpl{
-            dialector: pgConn,
-        },
+			dialector: pgConn,
+		},
 		&gorm.Config{
 			// @NOTE: most of the case we don't need transaction since we will
 			//        handle everything manually so don't need to
 			SkipDefaultTransaction: true,
 
-            // @NOTE: cache prepared statement so the future queries might be
-            //        speed up
-            PrepareStmt: true,
+			// @NOTE: cache prepared statement so the future queries might be
+			//        speed up
+			PrepareStmt: true,
 
 			// @NOTE: configure logger
 			Logger: newLogger,
@@ -138,7 +138,7 @@ func NewPg(
 
 	return &dbImpl{
 		dbConn:    dbConn,
-        dialector: pgConn,
+		dialector: pgConn,
 	}, nil
 }
 
@@ -162,7 +162,7 @@ func (self *dbImpl) Establish() *gorm.DB {
 }
 
 func (self *dialectorProxyImpl) Name() string {
-    return self.dialector.Name()
+	return self.dialector.Name()
 }
 
 func (self *dialectorProxyImpl) Initialize(dbSql *gorm.DB) error {
@@ -173,7 +173,7 @@ func (self *dialectorProxyImpl) Initialize(dbSql *gorm.DB) error {
 	)
 	defer span.Finish()
 
-    return self.dialector.Initialize(dbSql)
+	return self.dialector.Initialize(dbSql)
 }
 
 func (self *dialectorProxyImpl) Migrator(dbSql *gorm.DB) gorm.Migrator {
@@ -184,29 +184,29 @@ func (self *dialectorProxyImpl) Migrator(dbSql *gorm.DB) gorm.Migrator {
 	)
 	defer span.Finish()
 
-    return self.dialector.Migrator(dbSql)
+	return self.dialector.Migrator(dbSql)
 }
 
 func (self *dialectorProxyImpl) DataTypeOf(field *schema.Field) string {
-    return self.dialector.DataTypeOf(field)
+	return self.dialector.DataTypeOf(field)
 }
 
 func (self *dialectorProxyImpl) DefaultValueOf(
-    field *schema.Field,
+	field *schema.Field,
 ) clause.Expression {
-    return self.dialector.DefaultValueOf(field)
+	return self.dialector.DefaultValueOf(field)
 }
 
 func (self *dialectorProxyImpl) BindVarTo(
-    writer clause.Writer,
-    stmt *gorm.Statement,
-    v interface{},
+	writer clause.Writer,
+	stmt *gorm.Statement,
+	v interface{},
 ) {
-    self.dialector.BindVarTo(writer, stmt, v)
+	self.dialector.BindVarTo(writer, stmt, v)
 }
 
 func (self *dialectorProxyImpl) QuoteTo(writer clause.Writer, data string) {
-    self.dialector.QuoteTo(writer, data)
+	self.dialector.QuoteTo(writer, data)
 }
 
 func (self *dialectorProxyImpl) Explain(sql string, vars ...interface{}) string {
@@ -217,5 +217,5 @@ func (self *dialectorProxyImpl) Explain(sql string, vars ...interface{}) string 
 	)
 	defer span.Finish()
 
-    return self.dialector.Explain(sql, vars...)
+	return self.dialector.Explain(sql, vars...)
 }

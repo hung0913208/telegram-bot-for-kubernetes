@@ -4,8 +4,8 @@ package search
 
 import (
 	"context"
+	"errors"
 	"fmt"
-    "errors"
 	"net/url"
 	"strconv"
 	"strings"
@@ -16,7 +16,6 @@ import (
 	"github.com/gocolly/colly/v2/proxy"
 	"github.com/gocolly/colly/v2/queue"
 )
-
 
 // ErrBlocked indicates that Google has detected that you were scraping and temporarily blocked you.
 // The duration of the block is unspecified.

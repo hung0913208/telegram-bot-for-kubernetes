@@ -30,8 +30,8 @@ const (
 )
 
 var (
-    me      telegram.Telegram
-	input   string 
+	me      telegram.Telegram
+	input   string
 	outputs []string
 )
 
@@ -41,7 +41,7 @@ func init() {
 		timeout = 200
 	}
 
-    outputs = make([]string, 0)
+	outputs = make([]string, 0)
 
 	err = container.Init()
 	if err != nil {
@@ -61,11 +61,6 @@ func init() {
 		container.Terminate(fmt.Sprintf("sentry.Init: %v", err), ErrorInitSentry)
 	}
 	defer sentry.Flush(2 * time.Second)
-
-	err = container.RegisterSimpleModule("cluster", cluster.NewModule(), timeout)
-	if err != nil {
-		container.Terminate("Can't register module `cluster`", ErrorRegisterCluster)
-	}
 
 	port, err := strconv.Atoi(os.Getenv("ELEPHANSQL_PORT"))
 	if err != nil {
@@ -92,14 +87,24 @@ func init() {
 		container.Terminate("Can't register module `elephansql`", ErrorRegisterSql)
 	}
 
-    err = container.RegisterSimpleModule(
-        "toolbox",
-        toolbox.NewToolbox(input, &outputs),
-        timeout,
-    )
+	clusterModule, err := cluster.NewModule()
 	if err != nil {
-        container.Terminate(fmt.Sprintf("Can't register module `toolbox`: %v", err),
-                            ErrorRegisterBot)
+		container.Terminate(fmt.Sprintf("new cluster fail: %v", err), ErrorInitContainer)
+	}
+
+	err = container.RegisterSimpleModule("cluster", clusterModule, timeout)
+	if err != nil {
+		container.Terminate("Can't register module `cluster`", ErrorRegisterCluster)
+	}
+
+	err = container.RegisterSimpleModule(
+		"toolbox",
+		toolbox.NewToolbox(input, &outputs),
+		timeout,
+	)
+	if err != nil {
+		container.Terminate(fmt.Sprintf("Can't register module `toolbox`: %v", err),
+			ErrorRegisterBot)
 	}
 
 	me = telegram.NewTelegram(os.Getenv("TELEGRAM_TOKEN"))
@@ -125,10 +130,10 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-    bot, err := container.Pick("toolbox")
-    if err != nil {
-        return
-    }
+	bot, err := container.Pick("toolbox")
+	if err != nil {
+		return
+	}
 
 	logger := logs.NewLogger()
 	updateMsg, err := me.ParseIncomingRequest(r.Body)
@@ -180,8 +185,8 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	needAnswer := false
-    input   = strings.Trim(msg.Text, " ")
-    outputs = make([]string, 0)
+	input = strings.Trim(msg.Text, " ")
+	outputs = make([]string, 0)
 
 	if msg.Chat.Type == "private" {
 		needAnswer = true

@@ -1,9 +1,9 @@
 package toolbox
 
 type SettingModel struct {
-    Name   string `gorm:"primaryKey" json:"name"`
-    Type   int    `json:"type"`
-    Value  string `json:"value"`
+	Name  string `gorm:"primaryKey" json:"name"`
+	Type  int    `json:"type"`
+	Value string `json:"value"`
 }
 
 func (SettingModel) TableName() string {
@@ -11,7 +11,7 @@ func (SettingModel) TableName() string {
 }
 
 type HealthModel struct {
-    Url string
+	Url string
 }
 
 func (HealthModel) TableName() string {

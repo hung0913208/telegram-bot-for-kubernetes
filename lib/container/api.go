@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"log"
 	"os"
-    "time"
+	"time"
 )
 
 type Module interface {
 	Init(timeout time.Duration) error
 	Deinit() error
-    Execute(args []string) error
+	Execute(args []string) error
 }
 
 type RpcModule interface {
@@ -45,8 +45,8 @@ func Init() error {
 	return nil
 }
 
-func RegisterSimpleModule(name string, module Module, 
-                          timeout int) error {
+func RegisterSimpleModule(name string, module Module,
+	timeout int) error {
 	if iContainerManager == nil {
 		if err := Init(); err != nil {
 			return err
@@ -61,7 +61,7 @@ func RegisterSimpleModule(name string, module Module,
 		return fmt.Errorf("Object %s has been registered", name)
 	}
 
-	if err := module.Init(time.Duration(timeout)*time.Millisecond); err != nil {
+	if err := module.Init(time.Duration(timeout) * time.Millisecond); err != nil {
 		return err
 	}
 
@@ -76,8 +76,8 @@ func RegisterSimpleModule(name string, module Module,
 }
 
 func RegisterRpcModule(name string, module Module,
-                       timeout int) error {
-    return nil
+	timeout int) error {
+	return nil
 }
 
 func Terminate(msg string, exitCode int) {
@@ -95,27 +95,27 @@ func Terminate(msg string, exitCode int) {
 		}
 	}
 
+	log.Print(msg)
 	os.Exit(exitCode)
 }
 
 func Pick(name string) (Module, error) {
-    wrapper, ok := iContainerManager.mapping[name]
+	wrapper, ok := iContainerManager.mapping[name]
 
-    if !ok {
-        return nil, fmt.Errorf("Module `%s` doesn`t exist", name)
-    }
-    return wrapper.module, nil
+	if !ok {
+		return nil, fmt.Errorf("Module `%s` doesn`t exist", name)
+	}
+	return wrapper.module, nil
 }
 
 func Lookup(index int) (Module, error) {
-    if index >= len(iContainerManager.modules) {
-        return nil, fmt.Errorf(
-            "index `%d` is out of scope, must below %d", 
-            index, 
-            len(iContainerManager.modules),
-        )
-    }
+	if index >= len(iContainerManager.modules) {
+		return nil, fmt.Errorf(
+			"index `%d` is out of scope, must below %d",
+			index,
+			len(iContainerManager.modules),
+		)
+	}
 
-    return iContainerManager.modules[index], nil
+	return iContainerManager.modules[index], nil
 }
-
