@@ -30,6 +30,11 @@ type Api interface {
 	ListCluster() ([]*api.Cluster, error)
 	ListServer() ([]*api.Server, error)
 	ListVolume() ([]*api.Volume, error)
+
+	// SyncFirewall()
+	// SyncCluster()
+	// SyncServer()
+	// SyncVolume()
 }
 
 type apiImpl struct {

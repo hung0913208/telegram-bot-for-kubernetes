@@ -24,6 +24,7 @@ type toolboxImpl struct {
 	io        io.Io
 	timeout   time.Duration
 	wg        *sync.WaitGroup
+	enable    bool
 	logger    logs.Logger
 	bizflyApi map[string]bizfly.Api
 }
@@ -43,6 +44,7 @@ func (self *toolboxImpl) Init(timeout time.Duration) error {
 	var setting SettingModel
 
 	self.timeout = timeout
+	self.enable = false
 
 	if len(self.bizflyApi) == 0 {
 		clients, err := bizfly.NewApiFromDatabase(
@@ -77,23 +79,27 @@ func (self *toolboxImpl) Init(timeout time.Duration) error {
 	result := dbConn.Where("name = ?", "timeout").
 		First(&setting)
 
-	if result.Error != nil {
-		self.logger.Warnf("%v", result.Error)
-		return nil
+	if result.Error == nil {
+		timeoutFromDb, err := strconv.Atoi(setting.Value)
+		if err != nil {
+			self.logger.Errorf(
+				"convert timeout value fail: %v\n\nValue = %v (type %d)",
+				err,
+				setting.Value,
+				setting.Type,
+			)
+			return err
+		}
+
+		self.timeout = time.Duration(timeoutFromDb) * time.Millisecond
 	}
 
-	timeoutFromDb, err := strconv.Atoi(setting.Value)
-	if err != nil {
-		self.logger.Errorf(
-			"convert timeout value fail: %v\n\nValue = %v (type %d)",
-			err,
-			setting.Value,
-			setting.Type,
-		)
-		return err
-	}
+	result = dbConn.Where("name = ?", "enable").
+		First(&setting)
 
-	self.timeout = time.Duration(timeoutFromDb) * time.Millisecond
+	if result.Error == nil {
+		self.enable = setting.Value == "true"
+	}
 	return nil
 }
 
@@ -122,6 +128,10 @@ func (self *toolboxImpl) Execute(args []string) error {
 	parser.SetOut(self.io)
 
 	cmd, _, err := parser.Find(args)
+
+	if !self.enable && args[0] != "setting" && args[len(args)-1] != "--help" {
+		return nil
+	}
 
 	if err != nil || cmd == nil {
 		records, err := search.Search(nil, strings.Join(args, " "))

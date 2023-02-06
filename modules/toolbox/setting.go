@@ -16,6 +16,8 @@ import (
 type SettingToolbox interface {
 	SetTimeout(timeout string)
 	GetTimeout()
+	SetEnable(enable string)
+	GetEnable()
 }
 
 type settingToolboxImpl struct {
@@ -26,6 +28,43 @@ func newSettingToolbox(toolbox *toolboxImpl) SettingToolbox {
 	return &settingToolboxImpl{
 		toolbox: toolbox,
 	}
+}
+
+func (self *settingToolboxImpl) SetEnable(enable string) {
+	dbModule, err := container.Pick("elephansql")
+	if err != nil {
+		self.toolbox.Fail(fmt.Sprintf("Fail get elephansql: %v", err))
+		return
+	}
+
+	dbConn, err := db.Establish(dbModule)
+	if err != nil {
+		self.toolbox.Fail(fmt.Sprintf("Fail establish gorm: %v", err))
+		return
+	}
+
+	setting := SettingModel{
+		Name:  "enable",
+		Type:  2,
+		Value: enable,
+	}
+
+	// @NOTE: update on conflict, improve performance while keep
+	//        everything safe
+	dbConn.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "name"}},
+		DoUpdates: clause.AssignmentColumns([]string{"value"}),
+	}).Create(&setting)
+
+	// @NOTE: save for future
+	self.toolbox.enable = enable == "true"
+}
+
+func (self *settingToolboxImpl) GetEnable() {
+	self.toolbox.Ok(fmt.Sprintf(
+		"enable = %v",
+		self.toolbox.enable,
+	))
 }
 
 func (self *settingToolboxImpl) GetTimeout() {
@@ -106,6 +145,22 @@ func (self *toolboxImpl) newSettingParser() *cobra.Command {
 				}
 
 				newSettingToolbox(self).SetTimeout(args[0])
+			},
+		),
+	})
+
+	root.AddCommand(&cobra.Command{
+		Use:   "enable",
+		Short: "Get/Set toolbox timeout",
+		Run: self.GenerateSafeCallback(
+			"setting-enable",
+			func(cmd *cobra.Command, args []string) {
+				if len(args) == 0 {
+					newSettingToolbox(self).GetEnable()
+					return
+				}
+
+				newSettingToolbox(self).SetEnable(args[0])
 			},
 		),
 	})
