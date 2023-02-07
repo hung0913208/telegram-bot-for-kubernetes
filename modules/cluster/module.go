@@ -134,10 +134,21 @@ func Join(tenant kubernetes.Tenant, module ...string) error {
 			return err
 		}
 
+		metadata, err := tenant.GetMetadata()
+		if err != nil {
+			return err
+		}
+
+		encodedMetadata, err := json.Marshal(metadata)
+		if err != nil {
+			return err
+		}
+
 		dbConn.FirstOrCreate(
 			&ClusterModel{
 				Name:       tenant.GetName(),
 				Provider:   ProviderEnum(provider),
+				Metadata:   encodedMetadata,
 				Kubeconfig: kubeconfig,
 			},
 			ClusterModel{Kubeconfig: kubeconfig},

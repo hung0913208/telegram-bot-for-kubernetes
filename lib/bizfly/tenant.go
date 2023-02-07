@@ -53,6 +53,7 @@ func NewTenant(
 		provider: provider,
 		cluster:  cluster,
 		client:   client,
+		name:     cluster.UID,
 	}, nil
 }
 
