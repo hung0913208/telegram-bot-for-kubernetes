@@ -16,7 +16,7 @@ type BizflyToolbox interface {
 		timeout time.Duration,
 	)
 	PrintAll(detail bool)
-	Sync(account string)
+	Sync(resource, account string)
 	Billing()
 }
 
@@ -70,33 +70,63 @@ func (self *bizflyToolboxImpl) Billing() {
 	}
 }
 
-func (self *bizflyToolboxImpl) Sync(account string) {
+func (self *bizflyToolboxImpl) Sync(resource, account string) {
 	client, ok := self.toolbox.bizflyApi[account]
 	if !ok {
 		self.toolbox.Fail(fmt.Sprintf("Unknown %s", account))
 		return
 	}
 
-	clusters, err := client.ListCluster()
-	if err != nil {
-		self.toolbox.Fail(fmt.Sprintf("Can't get list clusters: %v", err))
-		return
-	}
-
-	for _, clusterObj := range clusters {
-		tenant, err := bizfly.NewTenant(
-			client,
-			clusterObj,
-		)
+	switch resource {
+	case "cluster":
+		clusters, err := client.ListCluster()
 		if err != nil {
-			self.toolbox.Fail("Can't init cluster %s: %v", clusterObj.UID, err)
-			continue
+			self.toolbox.Fail(fmt.Sprintf("Can't get list clusters: %v", err))
+			return
 		}
 
-		err = cluster.Join(tenant)
-		if err != nil {
-			self.toolbox.Fail("Can't join %s: %v", clusterObj.UID, err)
+		for _, clusterObj := range clusters {
+			tenant, err := bizfly.NewTenant(
+				client,
+				clusterObj,
+			)
+			if err != nil {
+				self.toolbox.Fail("Can't init cluster %s: %v", clusterObj.UID, err)
+				continue
+			}
+
+			err = cluster.Join(tenant)
+			if err != nil {
+				self.toolbox.Fail("Can't join %s: %v", clusterObj.UID, err)
+			}
 		}
+
+	case "kubernetes":
+		err := client.SyncCluster()
+		if err != nil {
+			self.toolbox.Fail("synchronize resource `kubernetes` fail: %v", err)
+		}
+
+	case "server":
+		err := client.SyncServer()
+		if err != nil {
+			self.toolbox.Fail("synchronize resource `server` fail: %v", err)
+		}
+
+	case "volume":
+		err := client.SyncVolume()
+		if err != nil {
+			self.toolbox.Fail("synchronize resource `volume` fail: %v", err)
+		}
+
+	case "firewall":
+		err := client.SyncFirewall()
+		if err != nil {
+			self.toolbox.Fail("synchronize resource `firewall` fail: %v", err)
+		}
+
+	default:
+		self.toolbox.Fail("Don't support resource `%s`", resource)
 	}
 }
 
@@ -174,6 +204,44 @@ func (self *bizflyToolboxImpl) PrintAll(detail bool) {
 		}
 
 		if detail {
+			if len(servers) > 0 {
+				self.toolbox.Ok("List servers:\n")
+
+				for _, server := range servers {
+					self.toolbox.Ok(fmt.Sprintf(
+						" + %s - %s - %s",
+						server.ID,
+						server.Name,
+						server.Status,
+					))
+
+					if detail {
+						for _, vol := range server.AttachedVolumes {
+							self.toolbox.Ok(fmt.Sprintf(
+								"   \\-> %s - %s",
+								vol.ID,
+								vol.Type,
+							))
+						}
+					}
+				}
+				self.toolbox.Flush()
+			}
+
+			if len(volumes) > 0 {
+				self.toolbox.Ok("List volumes:\n")
+
+				for _, vol := range volumes {
+					self.toolbox.Ok(fmt.Sprintf(
+						" + %s - %v - %v",
+						vol.ID,
+						vol.Status,
+						vol.VolumeType,
+					))
+				}
+				self.toolbox.Flush()
+			}
+
 			firewalls, err := client.ListFirewall()
 
 			if err != nil {
@@ -280,20 +348,8 @@ func (self *toolboxImpl) newBizflyParser() *cobra.Command {
 			"The project id which is used to identify and isolate billing resource")
 
 	root.AddCommand(&cobra.Command{
-		Use:   "kubeconfig",
-		Short: "Login specific bizfly account",
-		Long: "Authenticate bizfly cloud project:\n\n" +
-			"sre bizfly kubeconfig <cluster-name>",
-		Run: func(cmd *cobra.Command, args []string) {
-			if len(args) != 1 {
-				return
-			}
-		},
-	})
-
-	root.AddCommand(&cobra.Command{
 		Use:   "billing",
-		Short: "List resource for each account of bizfly",
+		Short: "Show billing report",
 		Run: self.GenerateSafeCallback(
 			"bizfly-billing",
 			func(cmd *cobra.Command, args []string) {
@@ -308,18 +364,18 @@ func (self *toolboxImpl) newBizflyParser() *cobra.Command {
 		Run: self.GenerateSafeCallback(
 			"bizfly-all",
 			func(cmd *cobra.Command, args []string) {
-				newBizflyToolbox(self).PrintAll(false)
+				newBizflyToolbox(self).PrintAll(len(args) > 0 && args[0] == "true")
 			},
 		),
 	})
 
 	root.AddCommand(&cobra.Command{
 		Use:   "sync",
-		Short: "List resource for each account of bizfly",
+		Short: "Synchronize resource between cloud and toolbox",
 		Run: self.GenerateSafeCallback(
 			"bizfly-sync",
 			func(cmd *cobra.Command, args []string) {
-				newBizflyToolbox(self).Sync(args[0])
+				newBizflyToolbox(self).Sync(args[0], args[1])
 			},
 		),
 	})
