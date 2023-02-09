@@ -14,5 +14,6 @@ func (self *toolboxImpl) newRootParser() *cobra.Command {
 	root.AddCommand(self.newBizflyParser())
 	root.AddCommand(self.newSettingParser())
 	root.AddCommand(self.newHealthParser())
+	root.AddCommand(self.newKubernetesParser())
 	return root
 }

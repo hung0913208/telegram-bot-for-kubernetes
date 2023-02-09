@@ -94,7 +94,10 @@ func init() {
 
 	err = container.RegisterSimpleModule("cluster", clusterModule, timeout)
 	if err != nil {
-		container.Terminate("Can't register module `cluster`", ErrorRegisterCluster)
+		container.Terminate(
+			fmt.Sprintf("Can't register module `cluster`: %v", err),
+			ErrorRegisterCluster,
+		)
 	}
 
 	err = container.RegisterSimpleModule(

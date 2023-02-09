@@ -2,6 +2,7 @@ package bizfly
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"os"
@@ -9,7 +10,8 @@ import (
 	"time"
 
 	api "github.com/bizflycloud/gobizfly"
-	orm "gorm.io/gorm"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"github.com/hung0913208/telegram-bot-for-kubernetes/lib/container"
 	"github.com/hung0913208/telegram-bot-for-kubernetes/lib/db"
@@ -30,19 +32,27 @@ type Api interface {
 	ListCluster() ([]*api.Cluster, error)
 	ListServer() ([]*api.Server, error)
 	ListVolume() ([]*api.Volume, error)
+	ListPool(clusterId string) ([]*api.ExtendedWorkerPool, error)
 
 	SyncFirewall() error
 	SyncCluster() error
 	SyncServer() error
 	SyncVolume() error
+	SyncPool(clusterId string) error
+	SyncPoolNode(clusterId, poolId string) error
+
+	// AdjustVolume() error
+	// AdjustPool() error
+	// AdjustAlert() error
 }
 
 type apiImpl struct {
 	ctx        context.Context
 	cancelFunc context.CancelFunc
-	dbConn     *orm.DB
+	dbConn     *gorm.DB
 	token      *api.Token
 	client     *api.Client
+	uuid       string
 	host       string
 	region     string
 	username   string
@@ -64,6 +74,8 @@ func NewApiFromDatabase(host, region string, timeout time.Duration) ([]Api, erro
 	dbConn.Migrator().CreateTable(
 		&AccountModel{},
 		&ClusterModel{},
+		&PoolModel{},
+		&PoolNodeModel{},
 		&ServerModel{},
 		&VolumeModel{},
 		&FirewallModel{},
@@ -86,10 +98,15 @@ func NewApiFromDatabase(host, region string, timeout time.Duration) ([]Api, erro
 			return nil, err
 		}
 
+		projectId := ""
+		if record.ProjectId != "default" {
+			projectId = record.ProjectId
+		}
+
 		client, err := newApiWithProjectIdAndUpdateDb(
 			host,
 			region,
-			record.ProjectId,
+			projectId,
 			record.Email,
 			record.Password,
 			timeout,
@@ -104,6 +121,7 @@ func NewApiFromDatabase(host, region string, timeout time.Duration) ([]Api, erro
 			)
 		}
 
+		(client.(*apiImpl)).uuid = record.UUID
 		(client.(*apiImpl)).dbConn = dbConn
 		ret = append(ret, client)
 	}
@@ -222,40 +240,27 @@ func (self *apiImpl) SetToken() error {
 		}
 
 		if len(user.BillingAccID) > 0 {
-			result := self.dbConn.FirstOrCreate(
-				&AccountModel{
-					BaseModel: BaseModel{
-						UUID: fmt.Sprintf("%s-%s", user.BillingAccID, projectId),
-					},
-					Email:     self.username,
-					Password:  self.password,
-					ProjectId: self.projectId,
-				},
-				AccountModel{
-					BaseModel: BaseModel{
-						UUID: fmt.Sprintf("%s-%s", user.BillingAccID, projectId),
-					},
-				},
-			)
-			return result.Error
+			self.uuid = fmt.Sprintf("%s-%s", user.BillingAccID, projectId)
 		} else {
-			result := self.dbConn.FirstOrCreate(
-				&AccountModel{
-					BaseModel: BaseModel{
-						UUID: fmt.Sprintf("fakeid:%s-%s", self.username, projectId),
-					},
-					Email:     self.username,
-					Password:  self.password,
-					ProjectId: self.projectId,
-				},
-				AccountModel{
-					BaseModel: BaseModel{
-						UUID: fmt.Sprintf("fakeid:%s-%s", self.username, projectId),
-					},
-				},
-			)
-			return result.Error
+			self.uuid = fmt.Sprintf("fakeid:%s-%s", self.username, projectId)
 		}
+
+		result := self.dbConn.FirstOrCreate(
+			&AccountModel{
+				BaseModel: BaseModel{
+					UUID: self.uuid,
+				},
+				Email:     self.username,
+				Password:  self.password,
+				ProjectId: projectId,
+			},
+			AccountModel{
+				BaseModel: BaseModel{
+					UUID: self.uuid,
+				},
+			},
+		)
+		return result.Error
 	}
 	return nil
 }
@@ -310,10 +315,13 @@ func (self *apiImpl) GetUserInfo() (*api.User, error) {
 func (self *apiImpl) GetKubeconfig(clusterId string) (string, error) {
 	defer self.cancelFunc()
 
-	return self.client.KubernetesEngine.GetKubeConfig(
+	kubeconfig, err := self.client.KubernetesEngine.GetKubeConfig(
 		self.ctx,
 		clusterId,
 	)
+	fmt.Println(len(kubeconfig))
+
+	return kubeconfig, err
 }
 
 func (self *apiImpl) ListCluster() ([]*api.Cluster, error) {
@@ -329,8 +337,9 @@ func (self *apiImpl) ListCluster() ([]*api.Cluster, error) {
 	}
 
 	rows, err := dbConn.Model(&ClusterModel{}).
-		Where("account = ?", self.GetAccount()).
+		Where("account = ?", self.uuid).
 		Rows()
+
 	if err != nil {
 		return nil, err
 	}
@@ -367,7 +376,7 @@ func (self *apiImpl) ListServer() ([]*api.Server, error) {
 	}
 
 	rows, err := dbConn.Model(&ServerModel{}).
-		Where("account = ?", self.GetAccount()).
+		Where("account = ?", self.uuid).
 		Rows()
 	if err != nil {
 		return nil, err
@@ -404,7 +413,7 @@ func (self *apiImpl) ListFirewall() ([]*api.Firewall, error) {
 	}
 
 	rows, err := dbConn.Model(&FirewallModel{}).
-		Where("account = ?", self.GetAccount()).
+		Where("account = ?", self.uuid).
 		Rows()
 	if err != nil {
 		return nil, err
@@ -484,7 +493,7 @@ func (self *apiImpl) ListVolume() ([]*api.Volume, error) {
 	}
 
 	rows, err := dbConn.Model(&VolumeModel{}).
-		Where("account = ?", self.GetAccount()).
+		Where("account = ?", self.uuid).
 		Rows()
 	if err != nil {
 		return nil, err
@@ -507,6 +516,52 @@ func (self *apiImpl) ListVolume() ([]*api.Volume, error) {
 	}
 
 	return volumes, nil
+}
+
+func (self *apiImpl) ListPool(clusterId string) ([]*api.ExtendedWorkerPool, error) {
+	var rows *sql.Rows
+
+	pools := make([]*api.ExtendedWorkerPool, 0)
+	dbModule, err := container.Pick("elephansql")
+	if err != nil {
+		return nil, err
+	}
+
+	dbConn, err := db.Establish(dbModule)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err = dbConn.Model(&PoolModel{}).
+		Where("cluster = ?", clusterId).
+		Rows()
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var record PoolModel
+
+		err = dbConn.ScanRows(rows, &record)
+		if err != nil {
+			return nil, err
+		}
+
+		pools = append(pools, &api.ExtendedWorkerPool{
+			UID: record.UUID,
+			WorkerPool: api.WorkerPool{
+				Name:              record.Name,
+				EnableAutoScaling: record.EnableAutoscaling,
+				MinSize:           record.RequiredSize,
+				MaxSize:           record.LimitSize,
+			},
+			ProvisionStatus:    record.Status,
+			AutoScalingGroupID: record.Autoscale,
+		})
+	}
+
+	return pools, nil
 }
 
 func (self *apiImpl) SyncCluster() error {
@@ -544,9 +599,10 @@ func (self *apiImpl) SyncCluster() error {
 			BaseModel: BaseModel{
 				UUID: cluster.UID,
 			},
-			Account: self.GetAccount(),
+			Account: self.uuid,
 			Name:    cluster.Name,
 			Status:  cluster.ProvisionStatus,
+			Locked:  true,
 		})
 	}
 
@@ -555,14 +611,9 @@ func (self *apiImpl) SyncCluster() error {
 		batchSize = 100
 	}
 
-	resp := dbConn.Model(ClusterModel{}).
-		Where("account = ?", self.GetAccount()).
-		Update("status", "Unknown")
-	if resp.Error != nil {
-		return resp.Error
-	}
-
-	resp = dbConn.CreateInBatches(clusterRecords, batchSize)
+	resp := dbConn.
+		Clauses(clause.OnConflict{DoNothing: true}).
+		CreateInBatches(clusterRecords, batchSize)
 	return resp.Error
 }
 
@@ -596,12 +647,33 @@ func (self *apiImpl) SyncServer() error {
 	serverRecords := make([]ServerModel, 0)
 
 	for _, server := range servers.([]*api.Server) {
+		if server.CreatedAt[len(server.CreatedAt)-1] != 'Z' {
+			server.CreatedAt += "Z"
+		}
+
+		if server.UpdatedAt[len(server.UpdatedAt)-1] != 'Z' {
+			server.UpdatedAt += "Z"
+		}
+
+		createdTime, err := time.Parse(time.RFC3339Nano, server.CreatedAt)
+		if err != nil {
+			return err
+		}
+
+		updatedTime, err := time.Parse(time.RFC3339Nano, server.UpdatedAt)
+		if err != nil {
+			return err
+		}
+
 		serverRecords = append(serverRecords, ServerModel{
 			BaseModel: BaseModel{
-				UUID: server.ID,
+				UUID:      server.ID,
+				CreatedAt: createdTime,
+				UpdatedAt: updatedTime,
 			},
-			Account: self.GetAccount(),
+			Account: self.uuid,
 			Status:  server.Status,
+			Locked:  true,
 		})
 	}
 
@@ -610,7 +682,9 @@ func (self *apiImpl) SyncServer() error {
 		batchSize = 100
 	}
 
-	resp := dbConn.CreateInBatches(serverRecords, batchSize)
+	resp := dbConn.
+		Clauses(clause.OnConflict{DoNothing: true}).
+		CreateInBatches(serverRecords, batchSize)
 	return resp.Error
 }
 
@@ -645,17 +719,57 @@ func (self *apiImpl) SyncFirewall() error {
 	firewallBoundRecords := make([]FirewallBoundModel, 0)
 
 	for _, firewall := range firewalls.([]*api.Firewall) {
+		if firewall.CreatedAt[len(firewall.CreatedAt)-1] != 'Z' {
+			firewall.CreatedAt += "Z"
+		}
+
+		if firewall.UpdatedAt[len(firewall.UpdatedAt)-1] != 'Z' {
+			firewall.UpdatedAt += "Z"
+		}
+
+		createdTime, err := time.Parse(time.RFC3339Nano, firewall.CreatedAt)
+		if err != nil {
+			return err
+		}
+
+		updatedTime, err := time.Parse(time.RFC3339Nano, firewall.UpdatedAt)
+		if err != nil {
+			return err
+		}
+
 		firewallRecords = append(firewallRecords, FirewallModel{
 			BaseModel: BaseModel{
-				UUID: firewall.ID,
+				UUID:      firewall.ID,
+				CreatedAt: createdTime,
+				UpdatedAt: updatedTime,
 			},
-			Account: self.GetAccount(),
+			Account: self.uuid,
 		})
 
 		for _, bound := range firewall.InBound {
+			if bound.CreatedAt[len(bound.CreatedAt)-1] != 'Z' {
+				bound.CreatedAt += "Z"
+			}
+
+			if bound.UpdatedAt[len(bound.UpdatedAt)-1] != 'Z' {
+				bound.UpdatedAt += "Z"
+			}
+
+			createdTime, err := time.Parse(time.RFC3339Nano, bound.CreatedAt)
+			if err != nil {
+				return err
+			}
+
+			updatedTime, err := time.Parse(time.RFC3339Nano, bound.UpdatedAt)
+			if err != nil {
+				return err
+			}
+
 			firewallBoundRecords = append(firewallBoundRecords, FirewallBoundModel{
 				BaseModel: BaseModel{
-					UUID: bound.ID,
+					UUID:      bound.ID,
+					CreatedAt: createdTime,
+					UpdatedAt: updatedTime,
 				},
 				Firewall: firewall.ID,
 				CIDR:     bound.CIDR,
@@ -664,9 +778,29 @@ func (self *apiImpl) SyncFirewall() error {
 		}
 
 		for _, bound := range firewall.OutBound {
+			if bound.CreatedAt[len(bound.CreatedAt)-1] != 'Z' {
+				bound.CreatedAt += "Z"
+			}
+
+			if bound.UpdatedAt[len(bound.UpdatedAt)-1] != 'Z' {
+				bound.UpdatedAt += "Z"
+			}
+
+			createdTime, err := time.Parse(time.RFC3339Nano, bound.CreatedAt)
+			if err != nil {
+				return err
+			}
+
+			updatedTime, err := time.Parse(time.RFC3339Nano, bound.UpdatedAt)
+			if err != nil {
+				return err
+			}
+
 			firewallBoundRecords = append(firewallBoundRecords, FirewallBoundModel{
 				BaseModel: BaseModel{
-					UUID: bound.ID,
+					UUID:      bound.ID,
+					CreatedAt: createdTime,
+					UpdatedAt: updatedTime,
 				},
 				Firewall: firewall.ID,
 				CIDR:     bound.CIDR,
@@ -680,12 +814,16 @@ func (self *apiImpl) SyncFirewall() error {
 		batchSize = 100
 	}
 
-	resp := dbConn.CreateInBatches(firewallRecords, batchSize)
+	resp := dbConn.
+		Clauses(clause.OnConflict{DoNothing: true}).
+		CreateInBatches(firewallRecords, batchSize)
 	if resp.Error != nil {
 		return resp.Error
 	}
 
-	resp = dbConn.CreateInBatches(firewallBoundRecords, batchSize)
+	resp = dbConn.
+		Clauses(clause.OnConflict{DoNothing: true}).
+		CreateInBatches(firewallBoundRecords, batchSize)
 	if resp.Error != nil {
 		return resp.Error
 	}
@@ -722,11 +860,31 @@ func (self *apiImpl) SyncVolume() error {
 	volumeRecords := make([]VolumeModel, 0)
 
 	for _, volume := range volumes.([]*api.Volume) {
+		if volume.CreatedAt[len(volume.CreatedAt)-1] != 'Z' {
+			volume.CreatedAt += "Z"
+		}
+
+		if volume.UpdatedAt[len(volume.UpdatedAt)-1] != 'Z' {
+			volume.UpdatedAt += "Z"
+		}
+
+		createdTime, err := time.Parse(time.RFC3339Nano, volume.CreatedAt)
+		if err != nil {
+			return err
+		}
+
+		updatedTime, err := time.Parse(time.RFC3339Nano, volume.UpdatedAt)
+		if err != nil {
+			return err
+		}
+
 		volumeRecords = append(volumeRecords, VolumeModel{
 			BaseModel: BaseModel{
-				UUID: volume.ID,
+				UUID:      volume.ID,
+				CreatedAt: createdTime,
+				UpdatedAt: updatedTime,
 			},
-			Account: self.GetAccount(),
+			Account: self.uuid,
 			Type:    volume.VolumeType,
 			Status:  volume.Status,
 		})
@@ -737,6 +895,131 @@ func (self *apiImpl) SyncVolume() error {
 		batchSize = 100
 	}
 
-	resp := dbConn.CreateInBatches(volumeRecords, batchSize)
+	resp := dbConn.
+		Clauses(clause.OnConflict{DoNothing: true}).
+		CreateInBatches(volumeRecords, batchSize)
+	return resp.Error
+}
+
+func (self *apiImpl) SyncPool(clusterId string) error {
+	dbModule, err := container.Pick("elephansql")
+	if err != nil {
+		return err
+	}
+
+	dbConn, err := db.Establish(dbModule)
+	if err != nil {
+		msg, bug := removeSvgBlock(fmt.Sprintf("%v", err))
+		if bug != nil {
+			panic(bug)
+		}
+
+		return errors.New(msg)
+	}
+
+	cluster, err := callBizflyApiWithMeasurement(
+		"list-pool",
+		func() (interface{}, error) {
+			return self.client.KubernetesEngine.Get(self.ctx, clusterId)
+		},
+	)
+	if err != nil {
+		return err
+	}
+
+	poolRecords := make([]PoolModel, 0)
+
+	for _, pool := range cluster.(*api.FullCluster).WorkerPools {
+		if pool.CreatedAt[len(pool.CreatedAt)-1] != 'Z' {
+			pool.CreatedAt += "Z"
+		}
+
+		createdTime, err := time.Parse(time.RFC3339Nano, pool.CreatedAt)
+		if err != nil {
+			return err
+		}
+
+		poolRecords = append(poolRecords, PoolModel{
+			BaseModel: BaseModel{
+				UUID:      pool.UID,
+				CreatedAt: createdTime,
+			},
+			Cluster:           clusterId,
+			Name:              pool.Name,
+			Status:            pool.ProvisionStatus,
+			Autoscale:         pool.AutoScalingGroupID,
+			EnableAutoscaling: pool.EnableAutoScaling,
+			RequiredSize:      pool.MaxSize,
+			LimitSize:         pool.MinSize,
+		})
+	}
+
+	batchSize, err := strconv.Atoi(os.Getenv("GORM_BATCH_SIZE"))
+	if err != nil {
+		batchSize = 100
+	}
+
+	resp := dbConn.
+		Clauses(clause.OnConflict{DoNothing: true}).
+		CreateInBatches(poolRecords, batchSize)
+	return resp.Error
+}
+
+func (self *apiImpl) SyncPoolNode(clusterId, poolId string) error {
+	dbModule, err := container.Pick("elephansql")
+	if err != nil {
+		return err
+	}
+
+	dbConn, err := db.Establish(dbModule)
+	if err != nil {
+		return err
+	}
+
+	nodes, err := callBizflyApiWithMeasurement(
+		"list-pool-nodes",
+		func() (interface{}, error) {
+			return self.client.KubernetesEngine.GetClusterWorkerPool(
+				self.ctx, clusterId, poolId)
+		},
+	)
+	if err != nil {
+		msg, bug := removeSvgBlock(fmt.Sprintf("%v", err))
+		if bug != nil {
+			panic(bug)
+		}
+
+		return errors.New(msg)
+	}
+
+	nodeRecords := make([]PoolNodeModel, 0)
+
+	for _, node := range nodes.(*api.WorkerPoolWithNodes).Nodes {
+		nodeRecords = append(nodeRecords, PoolNodeModel{
+			BaseModel: BaseModel{
+				UUID: node.ID,
+			},
+			Name:   node.Name,
+			Server: node.PhysicalID,
+			Status: node.Status,
+			Reason: node.StatusReason,
+		})
+
+		resp := dbConn.Model(&ServerModel{}).
+			Where("uuid = ?", node.PhysicalID).
+			Update("cluster", clusterId)
+		if resp.Error != nil {
+			return resp.Error
+		}
+	}
+
+	batchSize, err := strconv.Atoi(os.Getenv("GORM_BATCH_SIZE"))
+	if err != nil {
+		batchSize = 100
+	}
+
+	resp := dbConn.
+		Clauses(clause.OnConflict{DoNothing: true}).
+		CreateInBatches(nodeRecords, batchSize)
 	return resp.Error
 }

@@ -5,8 +5,7 @@ import (
 )
 
 type BaseModel struct {
-	Id        int       `gorm:"autoIncrement" json:"id"`
-	UUID      string    `gorm:"unique,index:idx_uuid" json:"uuid"`
+	UUID      string    `gorm:"primaryKey" json:"uuid"`
 	CreatedAt time.Time `gorm:"autoCreateTime" json:"create_at"`
 	UpdatedAt time.Time `gorm:"autoUpdateTime" json:"update_at"`
 }
@@ -14,7 +13,7 @@ type BaseModel struct {
 type AccountModel struct {
 	BaseModel
 
-	Email     string `json:"email"`
+	Email     string `gorm:"index:idx_email" json:"email"`
 	Password  string `json:"password"`
 	ProjectId string `json:"project_id"`
 }
@@ -30,10 +29,40 @@ type ClusterModel struct {
 	Name    string `gorm:"index:idx_name" json:"name"`
 	Status  string `json:"status"`
 	Balance int    `json:"balance"`
+	Locked  bool   `gorm:"index:idx_locked" json:"locked"`
 }
 
 func (ClusterModel) TableName() string {
 	return "tbl_bizfly_cluster"
+}
+
+type PoolModel struct {
+	BaseModel
+
+	Name              string `gorm:"index:idx_name" json:"name"`
+	Cluster           string `gorm:"index:idx_cluster_id" json:"cluster_id"`
+	Status            string `json:"status"`
+	Autoscale         string `json:"autoscale_group_id"`
+	EnableAutoscaling bool   `json:"scaleable"`
+	RequiredSize      int    `json:"required"`
+	LimitSize         int    `json:"limit"`
+}
+
+func (PoolModel) TableName() string {
+	return "tbl_bizfly_pool"
+}
+
+type PoolNodeModel struct {
+	BaseModel
+
+	Name   string `json:"name"`
+	Server string `gorm:"index:idx_server_id" json:"physical_id"`
+	Status string `gorm:"index:idx_status" json:"status"`
+	Reason string `json:"reason"`
+}
+
+func (PoolNodeModel) TableName() string {
+	return "tbl_bizfly_pool_node"
 }
 
 type ServerModel struct {
@@ -43,6 +72,7 @@ type ServerModel struct {
 	Status  string `gorm:"index:idx_status" json:"status"`
 	Cluster string `gorm:"index:idx_cluster_id" json:"cluster"`
 	Balance int    `json:"balance"`
+	Locked  bool   `gorm:"index:idx_locked" json:"locked"`
 }
 
 func (ServerModel) TableName() string {

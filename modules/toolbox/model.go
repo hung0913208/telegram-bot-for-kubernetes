@@ -17,3 +17,10 @@ type HealthModel struct {
 func (HealthModel) TableName() string {
 	return "tbl_toolbox_health"
 }
+
+type SessionModel struct {
+}
+
+func (SessionModel) TableName() string {
+	return "tbl_toolbox_session"
+}

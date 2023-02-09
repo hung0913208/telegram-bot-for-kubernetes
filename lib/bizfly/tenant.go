@@ -13,10 +13,11 @@ import (
 )
 
 type tenantImpl struct {
-	name     string
-	provider Api
-	client   kubernetes.Kubernetes
-	cluster  *api.Cluster
+	name       string
+	provider   Api
+	kubeconfig []byte
+	client     kubernetes.Kubernetes
+	cluster    *api.Cluster
 }
 
 type tenantMetadataImpl struct {
@@ -39,21 +40,22 @@ func NewTenant(
 		return nil, err
 	}
 
-	client, err := kubernetes.NewFromKubeconfig(kubeconfig)
+	client, err := kubernetes.NewFromKubeconfig([]byte(kubeconfig))
 	if err != nil {
 		return nil, err
 	}
 
-	_, err = client.GetPods()
+	_, err = client.GetPods("")
 	if err != nil {
 		return nil, err
 	}
 
 	return &tenantImpl{
-		provider: provider,
-		cluster:  cluster,
-		client:   client,
-		name:     cluster.UID,
+		provider:   provider,
+		cluster:    cluster,
+		kubeconfig: []byte(kubeconfig),
+		client:     client,
+		name:       cluster.Name,
 	}, nil
 }
 
@@ -119,19 +121,23 @@ func NewTenantFromMetadata(
 	return NewTenant(client, &cluster.ExtendedCluster.Cluster)
 }
 
+func (self *tenantImpl) GetClient() (kubernetes.Kubernetes, error) {
+	return self.client, nil
+}
+
 func (self *tenantImpl) GetName() string {
 	return self.name
 }
 
-func (self *tenantImpl) GetKubeconfig() (string, error) {
-	return self.provider.GetKubeconfig(self.cluster.UID)
+func (self *tenantImpl) GetKubeconfig() ([]byte, error) {
+	return self.kubeconfig, nil
 }
 
 func (self *tenantImpl) GetProvider() (string, error) {
 	return "bizfly", nil
 }
 
-func (self *tenantImpl) GetMedadata() (interface{}, error) {
+func (self *tenantImpl) GetMetadata() (interface{}, error) {
 	return &tenantMetadataImpl{
 		Account: self.provider.GetAccount(),
 		Cluster: self.cluster.UID,

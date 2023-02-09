@@ -14,7 +14,7 @@ require (
 	gorm.io/gorm v1.24.4
 	k8s.io/api v0.26.1
 	k8s.io/apimachinery v0.26.1
-	k8s.io/client-go v0.26.1
+	k8s.io/client-go v0.25.1
 )
 
 require (

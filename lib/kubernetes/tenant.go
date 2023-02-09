@@ -9,9 +9,10 @@ type Pool interface {
 
 type Tenant interface {
 	GetName() string
-	GetMedadata() (interface{}, error)
+	GetClient() (Kubernetes, error)
+	GetMetadata() (interface{}, error)
 	GetProvider() (string, error)
-	GetKubeconfig() (string, error)
+	GetKubeconfig() ([]byte, error)
 	GetPool(name string) (Pool, error)
 
 	SetPool(name string, pool Pool) error
@@ -19,14 +20,14 @@ type Tenant interface {
 
 type defaultTenantImpl struct {
 	name       string
-	kubeconfig string
+	kubeconfig []byte
 	metadata   interface{}
 	client     Kubernetes
 }
 
 func NewDefaultTenant(
 	name string,
-	kubeconfig string,
+	kubeconfig []byte,
 	metadata ...interface{},
 ) (Tenant, error) {
 	client, err := NewFromKubeconfig(kubeconfig)
@@ -34,7 +35,7 @@ func NewDefaultTenant(
 		return nil, err
 	}
 
-	if _, err := client.GetPods(); err != nil {
+	if _, err := client.GetPods(""); err != nil {
 		return nil, err
 	}
 
@@ -62,14 +63,18 @@ func (self *defaultTenantImpl) GetProvider() (string, error) {
 	return "", errors.New("Can't get provider from unknown tenant")
 }
 
-func (self *defaultTenantImpl) GetKubeconfig() (string, error) {
-	if _, err := self.client.GetPods(); err != nil {
-		return "", err
+func (self *defaultTenantImpl) GetClient() (Kubernetes, error) {
+	return self.client, nil
+}
+
+func (self *defaultTenantImpl) GetKubeconfig() ([]byte, error) {
+	if _, err := self.client.GetPods(""); err != nil {
+		return nil, err
 	}
 	return self.kubeconfig, nil
 }
 
-func (self *defaultTenantImpl) GetMedadata() (interface{}, error) {
+func (self *defaultTenantImpl) GetMetadata() (interface{}, error) {
 	return nil, errors.New("Can't get metadata from unknown tenant")
 }
 

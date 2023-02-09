@@ -3,6 +3,7 @@ package toolbox
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -24,9 +25,8 @@ type toolboxImpl struct {
 	io        io.Io
 	timeout   time.Duration
 	wg        *sync.WaitGroup
-	enable    bool
 	logger    logs.Logger
-	bizflyApi map[string]bizfly.Api
+	bizflyApi map[string][]bizfly.Api
 }
 
 func NewToolbox(input string, outputs *[]string) Toolbox {
@@ -35,7 +35,7 @@ func NewToolbox(input string, outputs *[]string) Toolbox {
 	return &toolboxImpl{
 		io:        io.NewStringStream(input, outputs),
 		wg:        &sync.WaitGroup{},
-		bizflyApi: make(map[string]bizfly.Api),
+		bizflyApi: make(map[string][]bizfly.Api),
 		logger:    logger,
 	}
 }
@@ -44,7 +44,6 @@ func (self *toolboxImpl) Init(timeout time.Duration) error {
 	var setting SettingModel
 
 	self.timeout = timeout
-	self.enable = false
 
 	if len(self.bizflyApi) == 0 {
 		clients, err := bizfly.NewApiFromDatabase(
@@ -58,7 +57,14 @@ func (self *toolboxImpl) Init(timeout time.Duration) error {
 
 		if clients != nil {
 			for _, client := range clients {
-				self.bizflyApi[client.GetAccount()] = client
+				if _, ok := self.bizflyApi[client.GetAccount()]; !ok {
+					self.bizflyApi[client.GetAccount()] = make([]bizfly.Api, 0)
+				}
+
+				self.bizflyApi[client.GetAccount()] = append(
+					self.bizflyApi[client.GetAccount()],
+					client,
+				)
 			}
 		}
 	}
@@ -93,13 +99,6 @@ func (self *toolboxImpl) Init(timeout time.Duration) error {
 
 		self.timeout = time.Duration(timeoutFromDb) * time.Millisecond
 	}
-
-	result = dbConn.Where("name = ?", "enable").
-		First(&setting)
-
-	if result.Error == nil {
-		self.enable = setting.Value == "true"
-	}
 	return nil
 }
 
@@ -128,10 +127,6 @@ func (self *toolboxImpl) Execute(args []string) error {
 	parser.SetOut(self.io)
 
 	cmd, _, err := parser.Find(args)
-
-	if !self.enable && args[0] != "setting" && args[len(args)-1] != "--help" {
-		return nil
-	}
 
 	if err != nil || cmd == nil {
 		records, err := search.Search(nil, strings.Join(args, " "))
@@ -212,7 +207,7 @@ func (self *toolboxImpl) Fail(msg string, data ...interface{}) {
 	self.io.Print(msg+"\n", data...)
 
 	if self.logger != nil {
-		self.logger.Error(msg)
+		self.logger.Error(fmt.Sprintf(msg, data...))
 	}
 }
 
