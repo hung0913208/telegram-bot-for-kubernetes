@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"k8s.io/apimachinery/pkg/labels"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	kubeapi "k8s.io/client-go/kubernetes"
@@ -42,11 +44,16 @@ func (self *kubernetesImpl) GetPods(namespace string) (*corev1.PodList, error) {
 }
 
 func (self *kubernetesImpl) GetAppPods(namespace string) (*corev1.PodList, error) {
+	selector, err := labels.Parse("app.kubernetes.io/managed-by notin (Helm)")
+	if err != nil {
+		return nil, err
+	}
+
 	return self.client.CoreV1().Pods(namespace).
 		List(
 			context.TODO(),
 			metav1.ListOptions{
-				LabelSelector: "app.kubernetes.io/managed-by notin (Helm)",
+				LabelSelector: selector.String(),
 			},
 		)
 }
