@@ -15,6 +15,10 @@ type BizflyToolbox interface {
 		timeout time.Duration,
 	)
 	PrintAll(detail bool)
+	PrintCluster(account, project string)
+	PrintPool(account, project, cluster string)
+	PrintServer(account, project, clusterName string)
+	PrintVolume(account, project, clusterName, server string)
 	Sync(resource, account string)
 	LinkPoolWithServer(account, project, pool string)
 	Billing()
@@ -231,6 +235,218 @@ func (self *bizflyToolboxImpl) Sync(resource, account string) {
 	}
 }
 
+func (self *bizflyToolboxImpl) PrintCluster(account, project string) {
+	clients, ok := self.toolbox.bizflyApi[account]
+	if !ok {
+		self.toolbox.Fail("Unknown %s", account)
+		return
+	}
+
+	for _, client := range clients {
+		if client.GetProjectId() != project {
+			continue
+		}
+
+		clusters, err := client.ListCluster()
+		if err != nil {
+			self.toolbox.Fail("Can't get list clusters: %v", err)
+			return
+		}
+
+		for _, cluster := range clusters {
+			self.toolbox.Ok(
+				" +  %s - %s - %s - %v",
+				cluster.UID,
+				cluster.Name,
+				cluster.ClusterStatus,
+				cluster.Tags,
+			)
+		}
+		return
+	}
+}
+
+func (self *bizflyToolboxImpl) PrintPool(account, project, clusterName string) {
+	clients, ok := self.toolbox.bizflyApi[account]
+	if !ok {
+		self.toolbox.Fail("Unknown %s", account)
+		return
+	}
+
+	for _, client := range clients {
+		if client.GetProjectId() != project {
+			continue
+		}
+
+		clusters, err := client.ListCluster()
+		if err != nil {
+			self.toolbox.Fail("Can't get list clusters: %v", err)
+			return
+		}
+
+		for _, clusterObj := range clusters {
+			if len(clusterName) > 0 && clusterObj.Name != clusterName {
+				continue
+			}
+
+			pools, err := client.ListPool(clusterObj.UID)
+			if err != nil {
+				self.toolbox.Fail("Can't get list pools: %v", err)
+				return
+			}
+
+			for _, pool := range pools {
+				self.toolbox.Ok(
+					" +  %s - %s - %s",
+					pool.UID,
+					clusterObj.Name,
+					pool.ProvisionStatus,
+				)
+			}
+			return
+		}
+	}
+}
+
+func (self *bizflyToolboxImpl) PrintServer(account, project, clusterName string) {
+	clients, ok := self.toolbox.bizflyApi[account]
+	if !ok {
+		self.toolbox.Fail("Unknown %s", account)
+		return
+	}
+
+	for _, client := range clients {
+		if client.GetProjectId() != project {
+			continue
+		}
+
+		clusters, err := client.ListCluster()
+		if err != nil {
+			self.toolbox.Fail("Can't get list clusters: %v", err)
+			return
+		}
+
+		if len(clusterName) == 0 {
+			servers, err := client.ListServer()
+			if err != nil {
+				self.toolbox.Fail("Can't get list pools: %v", err)
+				return
+			}
+
+			for _, server := range servers {
+				self.toolbox.Ok(
+					" +  %s - %s - %s",
+					server.ID,
+					server.Status,
+				)
+			}
+			return
+		}
+
+		for _, clusterObj := range clusters {
+			if len(clusterName) > 0 && clusterObj.Name != clusterName {
+				continue
+			}
+
+			servers, err := client.ListServer(clusterObj.UID)
+			if err != nil {
+				self.toolbox.Fail("Can't get list pools: %v", err)
+				return
+			}
+
+			for _, server := range servers {
+				self.toolbox.Ok(
+					" +  %s - %s - %s",
+					server.ID,
+					server.Status,
+				)
+			}
+			return
+		}
+	}
+}
+
+func (self *bizflyToolboxImpl) PrintVolume(account, project, clusterName, serverName string) {
+	clients, ok := self.toolbox.bizflyApi[account]
+	if !ok {
+		self.toolbox.Fail("Unknown %s", account)
+		return
+	}
+
+	for _, client := range clients {
+		if client.GetProjectId() != project {
+			continue
+		}
+
+		clusters, err := client.ListCluster()
+		if err != nil {
+			self.toolbox.Fail("Can't get list clusters: %v", err)
+			return
+		}
+
+		if len(clusterName) == 0 {
+			servers, err := client.ListServer()
+			if err != nil {
+				self.toolbox.Fail("Can't get list pools: %v", err)
+				return
+			}
+
+			for _, server := range servers {
+				if len(serverName) > 0 && server.Name != serverName {
+					continue
+				}
+
+				volumes, err := client.ListVolume(server.ID)
+				if err != nil {
+					self.toolbox.Fail("Can't get list volumes: %v", err)
+					return
+				}
+
+				for _, volume := range volumes {
+					self.toolbox.Ok(
+						" +  %s - %s",
+						volume.ID,
+						volume.Status,
+					)
+				}
+			}
+			return
+		}
+
+		for _, clusterObj := range clusters {
+			if len(clusterName) > 0 && clusterObj.Name != clusterName {
+				continue
+			}
+
+			servers, err := client.ListServer(clusterObj.UID)
+			if err != nil {
+				self.toolbox.Fail("Can't get list pools: %v", err)
+				return
+			}
+
+			for _, server := range servers {
+				if len(serverName) > 0 && server.Name != serverName {
+					continue
+				}
+
+				volumes, err := client.ListVolume(server.ID)
+				if err != nil {
+					self.toolbox.Fail("Can't get list volumes: %v", err)
+					return
+				}
+				for _, volume := range volumes {
+					self.toolbox.Ok(
+						" +  %s - %s",
+						volume.ID,
+						volume.Status,
+					)
+				}
+			}
+			return
+		}
+	}
+}
+
 func (self *bizflyToolboxImpl) PrintAll(detail bool) {
 	for name, clients := range self.toolbox.bizflyApi {
 		self.toolbox.Ok("Detail info of %s", name)
@@ -401,6 +617,11 @@ func (self *toolboxImpl) newBizflyParser() *cobra.Command {
 		Short: "Synchronize resource between cloud and toolbox",
 	}
 
+	bizflyPrintGroupCmd := &cobra.Command{
+		Use:   "print",
+		Short: "Print resource for dedicated IAM",
+	}
+
 	bizflyLogin := &cobra.Command{
 		Use:   "login",
 		Short: "Login specific bizfly account",
@@ -478,6 +699,122 @@ func (self *toolboxImpl) newBizflyParser() *cobra.Command {
 		),
 	}
 
+	bizflyPrintClusterCmd := &cobra.Command{
+		Use:   "cluster",
+		Short: "Print all cluster of dedicated IAM",
+		Run: self.GenerateSafeCallback(
+			"bizfly-print-cluster",
+			func(cmd *cobra.Command, args []string) {
+				projectId, err := cmd.Flags().GetString("project-id")
+				if err != nil {
+					self.Fail("parse project-id fail: %v", err)
+					return
+				}
+
+				account, err := cmd.Flags().GetString("email")
+				if err != nil {
+					self.Fail("parse email fail: %v", err)
+					return
+				}
+
+				newBizflyToolbox(self).PrintCluster(account, projectId)
+			},
+		),
+	}
+
+	bizflyPrintPoolCmd := &cobra.Command{
+		Use:   "pool",
+		Short: "Print all pool of specific cluster of dedicated IAM",
+		Run: self.GenerateSafeCallback(
+			"bizfly-print-pool",
+			func(cmd *cobra.Command, args []string) {
+				projectId, err := cmd.Flags().GetString("project-id")
+				if err != nil {
+					self.Fail("parse project-id fail: %v", err)
+					return
+				}
+
+				account, err := cmd.Flags().GetString("email")
+				if err != nil {
+					self.Fail("parse email fail: %v", err)
+					return
+				}
+
+				cluster, err := cmd.Flags().GetString("cluster")
+				if err != nil {
+					self.Fail("parse email fail: %v", err)
+					return
+				}
+
+				newBizflyToolbox(self).PrintPool(account, projectId, cluster)
+			},
+		),
+	}
+
+	bizflyPrintServerCmd := &cobra.Command{
+		Use:   "server",
+		Short: "Print all server of dedicated IAM",
+		Run: self.GenerateSafeCallback(
+			"bizfly-print-server",
+			func(cmd *cobra.Command, args []string) {
+				projectId, err := cmd.Flags().GetString("project-id")
+				if err != nil {
+					self.Fail("parse project-id fail: %v", err)
+					return
+				}
+
+				account, err := cmd.Flags().GetString("email")
+				if err != nil {
+					self.Fail("parse email fail: %v", err)
+					return
+				}
+
+				cluster, err := cmd.Flags().GetString("cluster")
+				if err != nil {
+					self.Fail("parse email fail: %v", err)
+					return
+				}
+
+				newBizflyToolbox(self).PrintServer(account, projectId, cluster)
+			},
+		),
+	}
+
+	bizflyPrintVolumeCmd := &cobra.Command{
+		Use:   "volume",
+		Short: "Print all volume of dedicated IAM",
+		Run: self.GenerateSafeCallback(
+			"bizfly-print-volume",
+			func(cmd *cobra.Command, args []string) {
+				projectId, err := cmd.Flags().GetString("project-id")
+				if err != nil {
+					self.Fail("parse project-id fail: %v", err)
+					return
+				}
+
+				account, err := cmd.Flags().GetString("email")
+				if err != nil {
+					self.Fail("parse email fail: %v", err)
+					return
+				}
+
+				cluster, err := cmd.Flags().GetString("cluster")
+				if err != nil {
+					self.Fail("parse email fail: %v", err)
+					return
+				}
+
+				server, err := cmd.Flags().GetString("server")
+				if err != nil {
+					self.Fail("parse email fail: %v", err)
+					return
+				}
+
+				newBizflyToolbox(self).PrintVolume(account, projectId, cluster, server)
+			},
+		),
+	}
+
 	bizflyLogin.PersistentFlags().
 		String("host", "https://manage.bizflycloud.vn",
 			"The bizfly control host where to manage service in dedicate regions")
@@ -495,6 +832,42 @@ func (self *toolboxImpl) newBizflyParser() *cobra.Command {
 	bizflyLinkPoolWithServerCmd.PersistentFlags().
 		String("project-id", "",
 			"The project id which is used to identify and isolate billing resource")
+
+	bizflyPrintClusterCmd.PersistentFlags().
+		String("email", "", "The email which is used to identify accounts")
+	bizflyPrintClusterCmd.PersistentFlags().
+		String("project-id", "",
+			"The project id which is used to identify and isolate billing resource")
+
+	bizflyPrintPoolCmd.PersistentFlags().
+		String("email", "", "The email which is used to identify accounts")
+	bizflyPrintPoolCmd.PersistentFlags().
+		String("project-id", "",
+			"The project id which is used to identify and isolate billing resource")
+	bizflyPrintPoolCmd.PersistentFlags().
+		String("cluster", "",
+			"The cluster id which identify which is used to filter output")
+
+	bizflyPrintServerCmd.PersistentFlags().
+		String("email", "", "The email which is used to identify accounts")
+	bizflyPrintServerCmd.PersistentFlags().
+		String("project-id", "",
+			"The project id which is used to identify and isolate billing resource")
+	bizflyPrintServerCmd.PersistentFlags().
+		String("cluster", "",
+			"The cluster id which identify which is used to filter output")
+
+	bizflyPrintVolumeCmd.PersistentFlags().
+		String("email", "", "The email which is used to identify accounts")
+	bizflyPrintVolumeCmd.PersistentFlags().
+		String("project-id", "",
+			"The project id which is used to identify and isolate billing resource")
+	bizflyPrintVolumeCmd.PersistentFlags().
+		String("cluster", "",
+			"The cluster id which identify which is used to filter output")
+	bizflyPrintServerCmd.PersistentFlags().
+		String("server", "",
+			"The cluster id which identify which is used to filter output")
 
 	root.AddCommand(&cobra.Command{
 		Use:   "billing",
@@ -653,8 +1026,14 @@ func (self *toolboxImpl) newBizflyParser() *cobra.Command {
 		),
 	})
 
+	bizflyPrintGroupCmd.AddCommand(bizflyPrintClusterCmd)
+	bizflyPrintGroupCmd.AddCommand(bizflyPrintPoolCmd)
+	bizflyPrintGroupCmd.AddCommand(bizflyPrintServerCmd)
+	bizflyPrintGroupCmd.AddCommand(bizflyPrintVolumeCmd)
+
 	bizflySyncGroupCmd.AddCommand(bizflyLinkPoolWithServerCmd)
 	root.AddCommand(bizflySyncGroupCmd)
+	root.AddCommand(bizflyPrintGroupCmd)
 	root.AddCommand(bizflyLogin)
 	return root
 }

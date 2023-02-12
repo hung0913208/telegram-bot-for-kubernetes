@@ -32,8 +32,8 @@ type Api interface {
 
 	ListFirewall() ([]*api.Firewall, error)
 	ListCluster() ([]*api.Cluster, error)
-	ListServer() ([]*api.Server, error)
-	ListVolume() ([]*api.Volume, error)
+	ListServer(clusterId ...string) ([]*api.Server, error)
+	ListVolume(serverId ...string) ([]*api.Volume, error)
 	ListPool(clusterId string) ([]*api.ExtendedWorkerPool, error)
 
 	SyncFirewall() error
@@ -42,6 +42,7 @@ type Api interface {
 	SyncVolume() error
 	SyncPool(clusterId string) error
 	SyncPoolNode(clusterId, poolId string) error
+	SyncVolumeAttachment(serverId string) error
 
 	// AdjustVolume() error
 	// AdjustPool() error
@@ -390,7 +391,9 @@ func (self *apiImpl) ListCluster() ([]*api.Cluster, error) {
 	return clusters, nil
 }
 
-func (self *apiImpl) ListServer() ([]*api.Server, error) {
+func (self *apiImpl) ListServer(clusterId ...string) ([]*api.Server, error) {
+	var rows *sql.Rows
+
 	servers := make([]*api.Server, 0)
 	dbModule, err := container.Pick("elephansql")
 	if err != nil {
@@ -402,9 +405,15 @@ func (self *apiImpl) ListServer() ([]*api.Server, error) {
 		return nil, err
 	}
 
-	rows, err := dbConn.Model(&ServerModel{}).
-		Where("account = ?", self.uuid).
-		Rows()
+	if len(clusterId) > 0 {
+		rows, err = dbConn.Model(&ServerModel{}).
+			Where("account = ? and cluster = ?", self.uuid, clusterId[0]).
+			Rows()
+	} else {
+		rows, err = dbConn.Model(&ServerModel{}).
+			Where("account = ?", self.uuid).
+			Rows()
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -507,7 +516,7 @@ func (self *apiImpl) ListFirewall() ([]*api.Firewall, error) {
 	return firewalls, nil
 }
 
-func (self *apiImpl) ListVolume() ([]*api.Volume, error) {
+func (self *apiImpl) ListVolume(serverId ...string) ([]*api.Volume, error) {
 	volumes := make([]*api.Volume, 0)
 	dbModule, err := container.Pick("elephansql")
 	if err != nil {
@@ -559,9 +568,14 @@ func (self *apiImpl) ListPool(clusterId string) ([]*api.ExtendedWorkerPool, erro
 		return nil, err
 	}
 
-	rows, err = dbConn.Model(&PoolModel{}).
-		Where("cluster = ?", clusterId).
-		Rows()
+	if len(clusterId) > 0 {
+		rows, err = dbConn.Model(&PoolModel{}).
+			Where("cluster = ?", clusterId).
+			Rows()
+	} else {
+		rows, err = dbConn.Model(&PoolModel{}).Rows()
+	}
+
 	if err != nil {
 		return nil, err
 	}
@@ -639,13 +653,15 @@ func (self *apiImpl) SyncCluster() error {
 	}
 
 	resp := dbConn.
-		Clauses(clause.OnConflict{DoNothing: true}).
+		Clauses(clause.OnConflict{UpdateAll: true}).
 		CreateInBatches(clusterRecords, batchSize)
 	return resp.Error
 }
 
 func (self *apiImpl) SyncServer() error {
 	dbModule, err := container.Pick("elephansql")
+	updateVolumes := true
+
 	if err != nil {
 		return err
 	}
@@ -702,6 +718,14 @@ func (self *apiImpl) SyncServer() error {
 			Status:  server.Status,
 			Locked:  true,
 		})
+
+		if updateVolumes {
+			err = self.updateVolumeAttachment(server)
+
+			if err != nil {
+				updateVolumes = false
+			}
+		}
 	}
 
 	batchSize, err := strconv.Atoi(os.Getenv("GORM_BATCH_SIZE"))
@@ -710,7 +734,7 @@ func (self *apiImpl) SyncServer() error {
 	}
 
 	resp := dbConn.
-		Clauses(clause.OnConflict{DoNothing: true}).
+		Clauses(clause.OnConflict{UpdateAll: true}).
 		CreateInBatches(serverRecords, batchSize)
 	return resp.Error
 }
@@ -842,14 +866,14 @@ func (self *apiImpl) SyncFirewall() error {
 	}
 
 	resp := dbConn.
-		Clauses(clause.OnConflict{DoNothing: true}).
+		Clauses(clause.OnConflict{UpdateAll: true}).
 		CreateInBatches(firewallRecords, batchSize)
 	if resp.Error != nil {
 		return resp.Error
 	}
 
 	resp = dbConn.
-		Clauses(clause.OnConflict{DoNothing: true}).
+		Clauses(clause.OnConflict{UpdateAll: true}).
 		CreateInBatches(firewallBoundRecords, batchSize)
 	if resp.Error != nil {
 		return resp.Error
@@ -923,7 +947,7 @@ func (self *apiImpl) SyncVolume() error {
 	}
 
 	resp := dbConn.
-		Clauses(clause.OnConflict{DoNothing: true}).
+		Clauses(clause.OnConflict{UpdateAll: true}).
 		CreateInBatches(volumeRecords, batchSize)
 	return resp.Error
 }
@@ -987,7 +1011,7 @@ func (self *apiImpl) SyncPool(clusterId string) error {
 	}
 
 	resp := dbConn.
-		Clauses(clause.OnConflict{DoNothing: true}).
+		Clauses(clause.OnConflict{UpdateAll: true}).
 		CreateInBatches(poolRecords, batchSize)
 	return resp.Error
 }
@@ -1046,7 +1070,47 @@ func (self *apiImpl) SyncPoolNode(clusterId, poolId string) error {
 	}
 
 	resp := dbConn.
-		Clauses(clause.OnConflict{DoNothing: true}).
+		Clauses(clause.OnConflict{UpdateAll: true}).
 		CreateInBatches(nodeRecords, batchSize)
 	return resp.Error
+}
+
+func (self *apiImpl) SyncVolumeAttachment(serverId string) error {
+	server, err := callBizflyApiWithMeasurement(
+		"list-attached-volumes",
+		func() (interface{}, error) {
+			return self.client.Server.Get(self.ctx, serverId)
+		},
+	)
+	if err != nil {
+		return err
+	}
+
+	if _, ok := server.(*api.Server); !ok {
+		return errors.New("get unknown object")
+	}
+
+	return self.updateVolumeAttachment(server.(*api.Server))
+}
+
+func (self *apiImpl) updateVolumeAttachment(server *api.Server) error {
+	dbModule, err := container.Pick("elephansql")
+	if err != nil {
+		return err
+	}
+
+	dbConn, err := db.Establish(dbModule)
+	if err != nil {
+		return err
+	}
+
+	for _, volume := range server.AttachedVolumes {
+		resp := dbConn.Model(&VolumeModel{}).
+			Where("uuid = ?", volume.ID).
+			Update("server", server.ID)
+		if resp.Error != nil {
+			return resp.Error
+		}
+	}
+	return nil
 }

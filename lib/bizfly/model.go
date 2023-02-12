@@ -84,6 +84,7 @@ type VolumeModel struct {
 
 	Account string `gorm:"index:idx_account_id" json:"account"`
 	Type    string `json:"type"`
+	Server  string `gorm:"index:idx_server_id" json:"server_id"`
 	Status  string `json:"status"`
 }
 
