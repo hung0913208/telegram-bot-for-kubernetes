@@ -23,6 +23,8 @@ type Api interface {
 	GetHost() string
 	GetRegion() string
 	GetToken() string
+	GetProjectId() string
+	GetPool(poolId string) (*PoolModel, error)
 	GetUserInfo() (*api.User, error)
 
 	SetRegion(region string) error
@@ -284,6 +286,31 @@ func (self *apiImpl) GetHost() string {
 
 func (self *apiImpl) GetToken() string {
 	return self.token.KeystoneToken
+}
+
+func (self *apiImpl) GetProjectId() string {
+	return self.projectId
+}
+
+func (self *apiImpl) GetPool(poolId string) (*PoolModel, error) {
+	var record PoolModel
+
+	dbModule, err := container.Pick("elephansql")
+	if err != nil {
+		return nil, err
+	}
+
+	dbConn, err := db.Establish(dbModule)
+	if err != nil {
+		return nil, err
+	}
+
+	resp := dbConn.First(&record, "uuid = ?", poolId)
+	if resp.Error != nil {
+		return nil, resp.Error
+	}
+
+	return &record, nil
 }
 
 func (self *apiImpl) GetRegion() string {

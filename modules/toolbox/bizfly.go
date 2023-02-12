@@ -16,6 +16,7 @@ type BizflyToolbox interface {
 	)
 	PrintAll(detail bool)
 	Sync(resource, account string)
+	LinkPoolWithServer(account, project, pool string)
 	Billing()
 }
 
@@ -78,6 +79,39 @@ func (self *bizflyToolboxImpl) Billing() {
 	}
 }
 
+func (self *bizflyToolboxImpl) LinkPoolWithServer(
+	account, project, pool string,
+) {
+	clients, ok := self.toolbox.bizflyApi[account]
+	if !ok {
+		self.toolbox.Fail("Unknown %s", account)
+		return
+	}
+
+	for _, client := range clients {
+		if client.GetProjectId() != project {
+			continue
+		}
+
+		pool, err := client.GetPool(pool)
+		if err != nil {
+			self.toolbox.Fail("Can't get list pools: %v", err)
+			return
+		}
+
+		if err := client.SyncPoolNode(pool.Cluster, pool.UUID); err != nil {
+			self.toolbox.Fail("Fail syncing pool %s cluster %s: %v",
+				pool.UUID,
+				pool.Cluster,
+				err,
+			)
+			return
+		}
+	}
+
+	self.toolbox.Ok("Sync done")
+}
+
 func (self *bizflyToolboxImpl) Sync(resource, account string) {
 	clients, ok := self.toolbox.bizflyApi[account]
 	if !ok {
@@ -101,6 +135,7 @@ func (self *bizflyToolboxImpl) Sync(resource, account string) {
 				)
 				if err != nil {
 					self.toolbox.Fail("Can't init cluster %s: %v", clusterObj.UID, err)
+					ok = false
 					continue
 				}
 
@@ -109,12 +144,12 @@ func (self *bizflyToolboxImpl) Sync(resource, account string) {
 					self.toolbox.Fail("Can't join %s: %v", clusterObj.UID, err)
 				}
 			}
-			self.toolbox.Ok("Sync done")
 
 		case "pool":
 			clusters, err := client.ListCluster()
 			if err != nil {
 				self.toolbox.Fail("Can't get list clusters: %v", err)
+				ok = false
 				return
 			}
 
@@ -124,10 +159,10 @@ func (self *bizflyToolboxImpl) Sync(resource, account string) {
 						clusterObj.UID,
 						err,
 					)
+					ok = false
 					continue
 				}
 			}
-			self.toolbox.Ok("Sync done")
 
 		case "node-pool":
 			clusters, err := client.ListCluster()
@@ -140,6 +175,7 @@ func (self *bizflyToolboxImpl) Sync(resource, account string) {
 				pools, err := client.ListPool(clusterObj.UID)
 				if err != nil {
 					self.toolbox.Fail("Can't get list pools: %v", err)
+					ok = false
 					continue
 				}
 
@@ -150,43 +186,48 @@ func (self *bizflyToolboxImpl) Sync(resource, account string) {
 							clusterObj.Name,
 							err,
 						)
+						ok = false
 						continue
 					}
 				}
 			}
-			self.toolbox.Ok("Sync done")
 
 		case "kubernetes":
 			err := client.SyncCluster()
 			if err != nil {
 				self.toolbox.Fail("synchronize resource `kubernetes` fail: %v", err)
+				return
 			}
-			self.toolbox.Ok("Sync done")
 
 		case "server":
 			err := client.SyncServer()
 			if err != nil {
 				self.toolbox.Fail("synchronize resource `server` fail: %v", err)
+				return
 			}
-			self.toolbox.Ok("Sync done")
 
 		case "volume":
 			err := client.SyncVolume()
 			if err != nil {
 				self.toolbox.Fail("synchronize resource `volume` fail: %v", err)
+				return
 			}
-			self.toolbox.Ok("Sync done")
 
 		case "firewall":
 			err := client.SyncFirewall()
 			if err != nil {
 				self.toolbox.Fail("synchronize resource `firewall` fail: %v", err)
+				return
 			}
-			self.toolbox.Ok("Sync done")
 
 		default:
 			self.toolbox.Fail("Don't support resource `%s`", resource)
+			return
 		}
+	}
+
+	if ok {
+		self.toolbox.Ok("Sync done")
 	}
 }
 
@@ -406,6 +447,36 @@ func (self *toolboxImpl) newBizflyParser() *cobra.Command {
 			},
 		),
 	}
+	bizflyLinkPoolWithServerCmd := &cobra.Command{
+		Use:   "node-pool",
+		Short: "Synchronize resource `node-pool` between cloud and toolbox",
+		Run: self.GenerateSafeCallback(
+			"bizfly-sync-node-pool",
+			func(cmd *cobra.Command, args []string) {
+				projectId, err := cmd.Flags().GetString("project-id")
+				if err != nil {
+					self.Fail("parse project-id fail: %v", err)
+					return
+				}
+
+				account, err := cmd.Flags().GetString("email")
+				if err != nil {
+					self.Fail("parse email fail: %v", err)
+					return
+				}
+
+				if len(args) != 1 {
+					self.Fail(
+						"Sync requires 1 arguments, you have %d",
+						len(args),
+					)
+					return
+				}
+
+				newBizflyToolbox(self).LinkPoolWithServer(account, projectId, args[0])
+			},
+		),
+	}
 
 	bizflyLogin.PersistentFlags().
 		String("host", "https://manage.bizflycloud.vn",
@@ -416,6 +487,12 @@ func (self *toolboxImpl) newBizflyParser() *cobra.Command {
 	bizflyLogin.PersistentFlags().
 		String("password", "", "The password of this account")
 	bizflyLogin.PersistentFlags().
+		String("project-id", "",
+			"The project id which is used to identify and isolate billing resource")
+
+	bizflyLinkPoolWithServerCmd.PersistentFlags().
+		String("email", "", "The email which is used to identify accounts")
+	bizflyLinkPoolWithServerCmd.PersistentFlags().
 		String("project-id", "",
 			"The project id which is used to identify and isolate billing resource")
 
@@ -492,24 +569,6 @@ func (self *toolboxImpl) newBizflyParser() *cobra.Command {
 				}
 
 				newBizflyToolbox(self).Sync("pool", args[0])
-			},
-		),
-	})
-	bizflySyncGroupCmd.AddCommand(&cobra.Command{
-		Use:   "node-pool",
-		Short: "Synchronize resource `node-pool` between cloud and toolbox",
-		Run: self.GenerateSafeCallback(
-			"bizfly-sync-node-pool",
-			func(cmd *cobra.Command, args []string) {
-				if len(args) != 1 {
-					self.Fail(
-						"Sync requires 1 arguments, you have %d",
-						len(args),
-					)
-					return
-				}
-
-				//newBizflyToolbox(self).Sync("node-pool", args[0])
 			},
 		),
 	})
@@ -594,6 +653,7 @@ func (self *toolboxImpl) newBizflyParser() *cobra.Command {
 		),
 	})
 
+	bizflySyncGroupCmd.AddCommand(bizflyLinkPoolWithServerCmd)
 	root.AddCommand(bizflySyncGroupCmd)
 	root.AddCommand(bizflyLogin)
 	return root
