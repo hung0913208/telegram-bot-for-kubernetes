@@ -46,7 +46,7 @@ func (self *kubernetesImpl) GetAppPods(namespace string) (*corev1.PodList, error
 		List(
 			context.TODO(),
 			metav1.ListOptions{
-				LabelSelector: "!app.kubernetes.io/managed-by",
+				LabelSelector: "app.kubernetes.io/managed-by notin (Helm)",
 			},
 		)
 }

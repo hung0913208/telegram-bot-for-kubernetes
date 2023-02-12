@@ -82,8 +82,14 @@ func (self *toolboxImpl) newKubernetesGetParser() *cobra.Command {
 					self.Fail("Fail get pods: %v", err)
 				}
 
+				cnt := 0
 				for _, pod := range pods.Items {
 					self.Ok("%s -  %s", pod.ObjectMeta.Name, pod.Status.Phase)
+					cnt += 1
+					if cnt == 10 {
+						self.Flush()
+						cnt = 0
+					}
 				}
 			},
 		),
@@ -127,8 +133,14 @@ func (self *toolboxImpl) newKubernetesGetParser() *cobra.Command {
 					self.Fail("Fail get pods: %v", err)
 				}
 
+				cnt := 0
 				for _, pod := range pods.Items {
 					self.Ok("%s -  %s", pod.ObjectMeta.Name, pod.Status.Phase)
+					cnt += 1
+					if cnt == 10 {
+						self.Flush()
+						cnt = 0
+					}
 				}
 			},
 		),
@@ -171,8 +183,14 @@ func (self *toolboxImpl) newKubernetesGetParser() *cobra.Command {
 					self.Fail("Fail get pods: %v", err)
 				}
 
+				cnt := 0
 				for _, pod := range pods.Items {
 					self.Ok("%s -  %s", pod.ObjectMeta.Name, pod.Status.Phase)
+					cnt += 1
+					if cnt == 10 {
+						self.Flush()
+						cnt = 0
+					}
 				}
 			},
 		),

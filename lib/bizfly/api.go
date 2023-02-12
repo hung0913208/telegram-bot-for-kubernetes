@@ -734,7 +734,10 @@ func (self *apiImpl) SyncServer() error {
 	}
 
 	resp := dbConn.
-		Clauses(clause.OnConflict{UpdateAll: true}).
+		Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "uuid"}},
+			DoUpdates: clause.AssignmentColumns([]string{"status", "updated_at"}),
+		}).
 		CreateInBatches(serverRecords, batchSize)
 	return resp.Error
 }
@@ -947,7 +950,10 @@ func (self *apiImpl) SyncVolume() error {
 	}
 
 	resp := dbConn.
-		Clauses(clause.OnConflict{UpdateAll: true}).
+		Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "uuid"}},
+			DoUpdates: clause.AssignmentColumns([]string{"status", "updated_at"}),
+		}).
 		CreateInBatches(volumeRecords, batchSize)
 	return resp.Error
 }

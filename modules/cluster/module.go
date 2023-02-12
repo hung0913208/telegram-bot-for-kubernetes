@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"time"
 
+	"gorm.io/gorm/clause"
+
 	"github.com/hung0913208/telegram-bot-for-kubernetes/lib/container"
 	"github.com/hung0913208/telegram-bot-for-kubernetes/lib/db"
 	"github.com/hung0913208/telegram-bot-for-kubernetes/lib/kubernetes"
@@ -206,16 +208,15 @@ func Join(tenant kubernetes.Tenant, module ...string) error {
 		encodedKubeconfig := []byte(base64.StdEncoding.EncodeToString(
 			[]byte(kubeconfig),
 		))
-		dbConn.FirstOrCreate(
-			&ClusterModel{
+
+		resp := dbConn.Clauses(clause.OnConflict{UpdateAll: true}).
+			Create(&ClusterModel{
 				Name:       tenant.GetName(),
 				Provider:   ProviderEnum(provider),
 				Metadata:   string(encodedMetadata),
 				Kubeconfig: string(encodedKubeconfig),
-			},
-			ClusterModel{Kubeconfig: string(encodedKubeconfig)},
-		)
-		return nil
+			})
+		return resp.Error
 	}
 }
 

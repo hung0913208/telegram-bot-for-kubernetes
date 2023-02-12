@@ -45,11 +45,6 @@ func NewTenant(
 		return nil, err
 	}
 
-	_, err = client.GetPods("")
-	if err != nil {
-		return nil, err
-	}
-
 	return &tenantImpl{
 		provider:   provider,
 		cluster:    cluster,

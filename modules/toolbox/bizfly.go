@@ -18,7 +18,7 @@ type BizflyToolbox interface {
 	PrintCluster(account, project string)
 	PrintPool(account, project, cluster string)
 	PrintServer(account, project, clusterName string)
-	PrintVolume(account, project, clusterName, server string)
+	PrintVolume(account, project, clusterName, server, status string)
 	Sync(resource, account string)
 	LinkPoolWithServer(account, project, pool string)
 	Billing()
@@ -146,6 +146,7 @@ func (self *bizflyToolboxImpl) Sync(resource, account string) {
 				err = cluster.Join(tenant)
 				if err != nil {
 					self.toolbox.Fail("Can't join %s: %v", clusterObj.UID, err)
+					continue
 				}
 			}
 
@@ -303,7 +304,6 @@ func (self *bizflyToolboxImpl) PrintPool(account, project, clusterName string) {
 					pool.ProvisionStatus,
 				)
 			}
-			return
 		}
 	}
 }
@@ -335,38 +335,39 @@ func (self *bizflyToolboxImpl) PrintServer(account, project, clusterName string)
 
 			for _, server := range servers {
 				self.toolbox.Ok(
-					" +  %s - %s - %s",
+					" +  %s - %s",
 					server.ID,
 					server.Status,
 				)
 			}
-			return
-		}
+		} else {
+			for _, clusterObj := range clusters {
+				if len(clusterName) > 0 && clusterObj.Name != clusterName {
+					continue
+				}
 
-		for _, clusterObj := range clusters {
-			if len(clusterName) > 0 && clusterObj.Name != clusterName {
-				continue
-			}
+				servers, err := client.ListServer(clusterObj.UID)
+				if err != nil {
+					self.toolbox.Fail("Can't get list pools: %v", err)
+					return
+				}
 
-			servers, err := client.ListServer(clusterObj.UID)
-			if err != nil {
-				self.toolbox.Fail("Can't get list pools: %v", err)
-				return
+				for _, server := range servers {
+					self.toolbox.Ok(
+						" +  %s - %s",
+						server.ID,
+						server.Status,
+					)
+				}
 			}
-
-			for _, server := range servers {
-				self.toolbox.Ok(
-					" +  %s - %s - %s",
-					server.ID,
-					server.Status,
-				)
-			}
-			return
 		}
 	}
 }
 
-func (self *bizflyToolboxImpl) PrintVolume(account, project, clusterName, serverName string) {
+func (self *bizflyToolboxImpl) PrintVolume(
+	account, project, clusterName, serverName, status string,
+) {
+	cnt := 0
 	clients, ok := self.toolbox.bizflyApi[account]
 	if !ok {
 		self.toolbox.Fail("Unknown %s", account)
@@ -403,46 +404,62 @@ func (self *bizflyToolboxImpl) PrintVolume(account, project, clusterName, server
 				}
 
 				for _, volume := range volumes {
+					if len(status) > 0 && status != volume.Status {
+						continue
+					}
+
 					self.toolbox.Ok(
 						" +  %s - %s",
 						volume.ID,
 						volume.Status,
 					)
+					cnt += 1
+					if cnt > 10 {
+						self.toolbox.Flush()
+						cnt = 0
+					}
 				}
 			}
-			return
-		}
-
-		for _, clusterObj := range clusters {
-			if len(clusterName) > 0 && clusterObj.Name != clusterName {
-				continue
-			}
-
-			servers, err := client.ListServer(clusterObj.UID)
-			if err != nil {
-				self.toolbox.Fail("Can't get list pools: %v", err)
-				return
-			}
-
-			for _, server := range servers {
-				if len(serverName) > 0 && server.Name != serverName {
+		} else {
+			for _, clusterObj := range clusters {
+				if len(clusterName) > 0 && clusterObj.Name != clusterName {
 					continue
 				}
 
-				volumes, err := client.ListVolume(server.ID)
+				servers, err := client.ListServer(clusterObj.UID)
 				if err != nil {
-					self.toolbox.Fail("Can't get list volumes: %v", err)
+					self.toolbox.Fail("Can't get list pools: %v", err)
 					return
 				}
-				for _, volume := range volumes {
-					self.toolbox.Ok(
-						" +  %s - %s",
-						volume.ID,
-						volume.Status,
-					)
+
+				for _, server := range servers {
+					if len(serverName) > 0 && server.Name != serverName {
+						continue
+					}
+
+					volumes, err := client.ListVolume(server.ID)
+					if err != nil {
+						self.toolbox.Fail("Can't get list volumes: %v", err)
+						return
+					}
+					for _, volume := range volumes {
+						if len(status) > 0 && status != volume.Status {
+							continue
+						}
+
+						self.toolbox.Ok(
+							" +  %s - %s",
+							volume.ID,
+							volume.Status,
+						)
+						cnt += 1
+						if cnt > 10 {
+							self.toolbox.Flush()
+							cnt = 0
+						}
+					}
 				}
 			}
-			return
 		}
 	}
 }
@@ -742,7 +759,7 @@ func (self *toolboxImpl) newBizflyParser() *cobra.Command {
 
 				cluster, err := cmd.Flags().GetString("cluster")
 				if err != nil {
-					self.Fail("parse email fail: %v", err)
+					self.Fail("parse cluster fail: %v", err)
 					return
 				}
 
@@ -771,7 +788,7 @@ func (self *toolboxImpl) newBizflyParser() *cobra.Command {
 
 				cluster, err := cmd.Flags().GetString("cluster")
 				if err != nil {
-					self.Fail("parse email fail: %v", err)
+					self.Fail("parse cluster fail: %v", err)
 					return
 				}
 
@@ -800,17 +817,23 @@ func (self *toolboxImpl) newBizflyParser() *cobra.Command {
 
 				cluster, err := cmd.Flags().GetString("cluster")
 				if err != nil {
-					self.Fail("parse email fail: %v", err)
+					self.Fail("parse cluster fail: %v", err)
 					return
 				}
 
 				server, err := cmd.Flags().GetString("server")
 				if err != nil {
-					self.Fail("parse email fail: %v", err)
+					self.Fail("parse server fail: %v", err)
+					return
+				}
+				status, err := cmd.Flags().GetString("status")
+				if err != nil {
+					self.Fail("parse status fail: %v", err)
 					return
 				}
 
-				newBizflyToolbox(self).PrintVolume(account, projectId, cluster, server)
+				newBizflyToolbox(self).
+					PrintVolume(account, projectId, cluster, server, status)
 			},
 		),
 	}
@@ -855,7 +878,7 @@ func (self *toolboxImpl) newBizflyParser() *cobra.Command {
 			"The project id which is used to identify and isolate billing resource")
 	bizflyPrintServerCmd.PersistentFlags().
 		String("cluster", "",
-			"The cluster id which identify which is used to filter output")
+			"The server id which identify which is used to filter output")
 
 	bizflyPrintVolumeCmd.PersistentFlags().
 		String("email", "", "The email which is used to identify accounts")
@@ -865,9 +888,12 @@ func (self *toolboxImpl) newBizflyParser() *cobra.Command {
 	bizflyPrintVolumeCmd.PersistentFlags().
 		String("cluster", "",
 			"The cluster id which identify which is used to filter output")
-	bizflyPrintServerCmd.PersistentFlags().
+	bizflyPrintVolumeCmd.PersistentFlags().
 		String("server", "",
-			"The cluster id which identify which is used to filter output")
+			"The server id which identify which is used to filter output")
+	bizflyPrintVolumeCmd.PersistentFlags().
+		String("status", "",
+			"The expected status of volumes")
 
 	root.AddCommand(&cobra.Command{
 		Use:   "billing",

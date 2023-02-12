@@ -1,15 +1,10 @@
 package cluster
 
-import (
-	"time"
-)
-
 type ClusterModel struct {
-	Name       string        `gorm:"primaryKey" json:"name"`
-	Provider   ProviderEnum  `json:"provider"`
-	Metadata   string        `json:"metadata"`
-	Kubeconfig string        `json:"kubeconfig"`
-	ExpiredAt  time.Duration `json:"expire_at"`
+	Name       string       `gorm:"primaryKey" json:"name"`
+	Provider   ProviderEnum `json:"provider"`
+	Metadata   string       `json:"metadata"`
+	Kubeconfig string       `json:"kubeconfig"`
 }
 
 func (ClusterModel) TableName() string {
