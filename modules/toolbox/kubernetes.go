@@ -14,6 +14,46 @@ func (self *toolboxImpl) newKubernetesParser() *cobra.Command {
 			"and perform SRE job script for dedicated intend",
 	}
 
+	root.AddCommand(&cobra.Command{
+		Use:   "status",
+		Short: "Get list of clusters",
+		Run: self.GenerateSafeCallback(
+			"k8s-status",
+			func(cmd *cobra.Command, args []string) {
+				clusterMgr, err := container.Pick("cluster")
+				if err != nil {
+					self.Fail("Get cluster got error: %v", err)
+					return
+				}
+
+				tenant, err := cluster.Pick(clusterMgr, args[0])
+				if err != nil {
+					self.Fail("Pick %s got error: %v", args[0], err)
+					return
+				}
+
+				client, err := tenant.GetClient()
+				if err != nil {
+					self.Fail("Get client got error: %v", err)
+					return
+				}
+
+				pods, err := client.GetPods("")
+				if err != nil {
+					self.Fail("Fail get pods: %v", err)
+				}
+
+				for _, pod := range pods.Items {
+					if pod.Status.Phase != "Running" {
+						self.Fail("Fail pod %s", pod.ObjectMeta.Name)
+						return
+					}
+				}
+
+				self.Ok("Seem Ok now!!!")
+			},
+		),
+	})
 	root.AddCommand(self.newKubernetesGetParser())
 	return root
 }

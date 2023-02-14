@@ -159,6 +159,43 @@ func (self *clusterImpl) loadTenantFromDb(name string) error {
 	return nil
 }
 
+func Detach(clusterName string, module ...string) error {
+	moduleName := "cluster"
+	if len(module) > 0 {
+		moduleName = module[0]
+	}
+
+	clusterModule, err := container.Pick(moduleName)
+	if err != nil {
+		return err
+	}
+
+	dbModule, err := container.Pick("elephansql")
+	if err != nil {
+		return err
+	}
+
+	dbConn, err := db.Establish(dbModule)
+	if err != nil {
+		return err
+	}
+
+	if clusterManager, ok := clusterModule.(*clusterImpl); !ok {
+		return errors.New("Cannot get module `cluster`")
+	} else {
+		resp := dbConn.Where("name = ?", clusterName).
+			Delete(&ClusterModel{
+				Name: clusterName,
+			})
+
+		if resp.Error == nil {
+			delete(clusterManager.tenants, clusterName)
+		}
+
+		return resp.Error
+	}
+}
+
 func Join(tenant kubernetes.Tenant, module ...string) error {
 	moduleName := "cluster"
 	if len(module) > 0 {

@@ -20,6 +20,7 @@ type BizflyToolbox interface {
 	PrintServer(account, project, clusterName string)
 	PrintVolume(account, project, clusterName, server, status string)
 	Sync(resource, account string)
+	Clean(account, project string)
 	LinkPoolWithServer(account, project, pool string)
 	Billing()
 }
@@ -83,6 +84,42 @@ func (self *bizflyToolboxImpl) Billing() {
 	}
 }
 
+func (self *bizflyToolboxImpl) Clean(account, project string) {
+	clients, ok := self.toolbox.bizflyApi[account]
+	if !ok {
+		self.toolbox.Fail("Unknown %s", account)
+		return
+	}
+
+	for _, client := range clients {
+		if client.GetProjectId() != project {
+			continue
+		}
+
+		clusters, err := client.ListCluster()
+		if err != nil {
+			self.toolbox.Fail("get list of clusters fails: %v", err)
+			return
+		}
+
+		for _, clusterObj := range clusters {
+			err = cluster.Detach(clusterObj.Name)
+			if err != nil {
+				self.toolbox.Fail("detach cluster %s: %v", clusterObj.Name, err)
+				return
+			}
+		}
+
+		err = client.Clean()
+		if err != nil {
+			self.toolbox.Fail("clean fail: %v", err)
+			return
+		}
+	}
+
+	self.toolbox.Ok("Sync done")
+}
+
 func (self *bizflyToolboxImpl) LinkPoolWithServer(
 	account, project, pool string,
 ) {
@@ -137,15 +174,25 @@ func (self *bizflyToolboxImpl) Sync(resource, account string) {
 					client,
 					clusterObj,
 				)
-				if err != nil {
+				if err != nil && client.DetachCluster(clusterObj.UID) != nil {
 					self.toolbox.Fail("Can't init cluster %s: %v", clusterObj.UID, err)
 					ok = false
+					continue
+				}
+
+				if tenant == nil {
+					err = cluster.Detach(clusterObj.UID)
+					if err != nil {
+						self.toolbox.Fail("Can't detach %s: %v", clusterObj.UID, err)
+						ok = false
+					}
 					continue
 				}
 
 				err = cluster.Join(tenant)
 				if err != nil {
 					self.toolbox.Fail("Can't join %s: %v", clusterObj.UID, err)
+					ok = false
 					continue
 				}
 			}
@@ -838,6 +885,29 @@ func (self *toolboxImpl) newBizflyParser() *cobra.Command {
 		),
 	}
 
+	bizflyCleanCmd := &cobra.Command{
+		Use:   "clean",
+		Short: "Clean cache manully",
+		Run: self.GenerateSafeCallback(
+			"bizfly-print-volume",
+			func(cmd *cobra.Command, args []string) {
+				projectId, err := cmd.Flags().GetString("project-id")
+				if err != nil {
+					self.Fail("parse project-id fail: %v", err)
+					return
+				}
+
+				account, err := cmd.Flags().GetString("email")
+				if err != nil {
+					self.Fail("parse email fail: %v", err)
+					return
+				}
+
+				newBizflyToolbox(self).Clean(account, projectId)
+			},
+		),
+	}
+
 	bizflyLogin.PersistentFlags().
 		String("host", "https://manage.bizflycloud.vn",
 			"The bizfly control host where to manage service in dedicate regions")
@@ -894,6 +964,12 @@ func (self *toolboxImpl) newBizflyParser() *cobra.Command {
 	bizflyPrintVolumeCmd.PersistentFlags().
 		String("status", "",
 			"The expected status of volumes")
+
+	bizflyCleanCmd.PersistentFlags().
+		String("email", "", "The email which is used to identify accounts")
+	bizflyCleanCmd.PersistentFlags().
+		String("project-id", "",
+			"The project id which is used to identify and isolate billing resource")
 
 	root.AddCommand(&cobra.Command{
 		Use:   "billing",
@@ -1058,8 +1134,10 @@ func (self *toolboxImpl) newBizflyParser() *cobra.Command {
 	bizflyPrintGroupCmd.AddCommand(bizflyPrintVolumeCmd)
 
 	bizflySyncGroupCmd.AddCommand(bizflyLinkPoolWithServerCmd)
+
 	root.AddCommand(bizflySyncGroupCmd)
 	root.AddCommand(bizflyPrintGroupCmd)
 	root.AddCommand(bizflyLogin)
+	root.AddCommand(bizflyCleanCmd)
 	return root
 }

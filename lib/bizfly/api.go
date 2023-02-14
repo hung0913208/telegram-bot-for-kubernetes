@@ -44,9 +44,13 @@ type Api interface {
 	SyncPoolNode(clusterId, poolId string) error
 	SyncVolumeAttachment(serverId string) error
 
+	DetachCluster(clusterId string) error
+
 	// AdjustVolume() error
 	// AdjustPool() error
 	// AdjustAlert() error
+
+	Clean() error
 }
 
 type apiImpl struct {
@@ -717,6 +721,7 @@ func (self *apiImpl) SyncServer() error {
 			Account: self.uuid,
 			Status:  server.Status,
 			Locked:  true,
+			Zone:    server.AvailabilityZone,
 		})
 
 		if updateVolumes {
@@ -856,6 +861,7 @@ func (self *apiImpl) SyncFirewall() error {
 					CreatedAt: createdTime,
 					UpdatedAt: updatedTime,
 				},
+				Account:  self.uuid,
 				Firewall: firewall.ID,
 				CIDR:     bound.CIDR,
 				Type:     1,
@@ -941,6 +947,7 @@ func (self *apiImpl) SyncVolume() error {
 			Account: self.uuid,
 			Type:    volume.VolumeType,
 			Status:  volume.Status,
+			Zone:    volume.AvailabilityZone,
 		})
 	}
 
@@ -1003,11 +1010,13 @@ func (self *apiImpl) SyncPool(clusterId string) error {
 			},
 			Cluster:           clusterId,
 			Name:              pool.Name,
+			Zone:              pool.AvailabilityZone,
 			Status:            pool.ProvisionStatus,
 			Autoscale:         pool.AutoScalingGroupID,
 			EnableAutoscaling: pool.EnableAutoScaling,
 			RequiredSize:      pool.MaxSize,
 			LimitSize:         pool.MinSize,
+			Account:           self.uuid,
 		})
 	}
 
@@ -1056,10 +1065,11 @@ func (self *apiImpl) SyncPoolNode(clusterId, poolId string) error {
 			BaseModel: BaseModel{
 				UUID: node.ID,
 			},
-			Name:   node.Name,
-			Server: node.PhysicalID,
-			Status: node.Status,
-			Reason: node.StatusReason,
+			Name:    node.Name,
+			Server:  node.PhysicalID,
+			Status:  node.Status,
+			Reason:  node.StatusReason,
+			Account: self.uuid,
 		})
 
 		resp := dbConn.Model(&ServerModel{}).
@@ -1097,6 +1107,87 @@ func (self *apiImpl) SyncVolumeAttachment(serverId string) error {
 	}
 
 	return self.updateVolumeAttachment(server.(*api.Server))
+}
+
+func (self *apiImpl) DetachCluster(clusterId string) error {
+	dbModule, err := container.Pick("elephansql")
+	if err != nil {
+		return err
+	}
+
+	dbConn, err := db.Establish(dbModule)
+	if err != nil {
+		return err
+	}
+
+	resp := dbConn.Delete(&ClusterModel{
+		BaseModel: BaseModel{
+			UUID: clusterId,
+		},
+	})
+	return resp.Error
+}
+
+func (self *apiImpl) Clean() error {
+	dbModule, err := container.Pick("elephansql")
+	if err != nil {
+		return err
+	}
+
+	dbConn, err := db.Establish(dbModule)
+	if err != nil {
+		return err
+	}
+
+	resp := dbConn.Where("account = ?", self.uuid).
+		Delete(&ClusterModel{Account: self.uuid})
+	if resp.Error != nil {
+		return resp.Error
+	}
+
+	resp = dbConn.Where("account = ?", self.uuid).
+		Delete(&PoolModel{Account: self.uuid})
+	if resp.Error != nil {
+		return resp.Error
+	}
+
+	resp = dbConn.Where("account = ?", self.uuid).
+		Delete(&PoolNodeModel{Account: self.uuid})
+	if resp.Error != nil {
+		return resp.Error
+	}
+
+	resp = dbConn.Where("account = ?", self.uuid).
+		Delete(&ServerModel{Account: self.uuid})
+	if resp.Error != nil {
+		return resp.Error
+	}
+
+	resp = dbConn.Where("account = ?", self.uuid).
+		Delete(&VolumeModel{Account: self.uuid})
+	if resp.Error != nil {
+		return resp.Error
+	}
+
+	resp = dbConn.Where("account = ?", self.uuid).
+		Delete(&FirewallModel{Account: self.uuid})
+	if resp.Error != nil {
+		return resp.Error
+	}
+
+	resp = dbConn.
+		Where("account = ?", self.uuid).
+		Delete(&FirewallBoundModel{Account: self.uuid})
+	if resp.Error != nil {
+		return resp.Error
+	}
+
+	resp = dbConn.Delete(&AccountModel{
+		BaseModel: BaseModel{
+			UUID: self.uuid,
+		},
+	})
+	return resp.Error
 }
 
 func (self *apiImpl) updateVolumeAttachment(server *api.Server) error {

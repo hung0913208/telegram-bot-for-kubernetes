@@ -2,7 +2,8 @@ package bizfly
 
 import (
 	"context"
-	"errors"
+    "errors"
+	"fmt"
 	"time"
 
 	api "github.com/bizflycloud/gobizfly"
@@ -37,12 +38,16 @@ func NewTenant(
 
 	kubeconfig, err := provider.GetKubeconfig(cluster.UID)
 	if err != nil {
-		return nil, err
+        return nil, fmt.Errorf("Get kubeconfig fails: %v", err)
 	}
 
 	client, err := kubernetes.NewFromKubeconfig([]byte(kubeconfig))
 	if err != nil {
-		return nil, err
+        return nil, fmt.Errorf(
+            "New kubernetes client fails: %v (receive %d)", 
+            err, 
+            len(kubeconfig),
+        )
 	}
 
 	return &tenantImpl{

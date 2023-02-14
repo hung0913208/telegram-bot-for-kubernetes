@@ -40,7 +40,9 @@ type PoolModel struct {
 	BaseModel
 
 	Name              string `gorm:"index:idx_name" json:"name"`
+	Account           string `gorm:"index:idx_account_id" json:"account"`
 	Cluster           string `gorm:"index:idx_cluster_id" json:"cluster_id"`
+	Zone              string `gorm:"index:idx_zone" json:"zone"`
 	Status            string `json:"status"`
 	Autoscale         string `json:"autoscale_group_id"`
 	EnableAutoscaling bool   `json:"scaleable"`
@@ -55,10 +57,11 @@ func (PoolModel) TableName() string {
 type PoolNodeModel struct {
 	BaseModel
 
-	Name   string `json:"name"`
-	Server string `gorm:"index:idx_server_id" json:"physical_id"`
-	Status string `gorm:"index:idx_status" json:"status"`
-	Reason string `json:"reason"`
+	Name    string `json:"name"`
+	Account string `gorm:"index:idx_account_id" json:"account"`
+	Server  string `gorm:"index:idx_server_id" json:"physical_id"`
+	Status  string `gorm:"index:idx_status" json:"status"`
+	Reason  string `json:"reason"`
 }
 
 func (PoolNodeModel) TableName() string {
@@ -73,6 +76,7 @@ type ServerModel struct {
 	Cluster string `gorm:"index:idx_cluster_id" json:"cluster"`
 	Balance int    `json:"balance"`
 	Locked  bool   `gorm:"index:idx_locked" json:"locked"`
+	Zone    string `gorm:"index:idx_zone" json:"zone"`
 }
 
 func (ServerModel) TableName() string {
@@ -86,6 +90,7 @@ type VolumeModel struct {
 	Type    string `json:"type"`
 	Server  string `gorm:"index:idx_server_id" json:"server_id"`
 	Status  string `json:"status"`
+	Zone    string `gorm:"index:idx_zone" json:"zone"`
 }
 
 func (VolumeModel) TableName() string {
@@ -112,6 +117,7 @@ const (
 type FirewallBoundModel struct {
 	BaseModel
 
+	Account  string            `gorm:"index:idx_account_id" json:"account"`
 	Firewall string            `gorm:"index:idx_firewall_id" json:"firewall"`
 	Type     FirewallBoundEnum `gorm:"index:idx_bound_type" json:"type"`
 	CIDR     string            `json:"cidr"`
