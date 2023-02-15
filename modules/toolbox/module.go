@@ -26,6 +26,7 @@ type toolboxImpl struct {
 	timeout   time.Duration
 	wg        *sync.WaitGroup
 	logger    logs.Logger
+	enable    bool
 	bizflyApi map[string][]bizfly.Api
 }
 
@@ -44,6 +45,7 @@ func (self *toolboxImpl) Init(timeout time.Duration) error {
 	var setting SettingModel
 
 	self.timeout = timeout
+	self.enable = false
 
 	if len(self.bizflyApi) == 0 {
 		clients, err := bizfly.NewApiFromDatabase(
@@ -94,11 +96,30 @@ func (self *toolboxImpl) Init(timeout time.Duration) error {
 				setting.Value,
 				setting.Type,
 			)
-			return err
+		} else {
+			self.timeout = time.Duration(timeoutFromDb) * time.Millisecond
 		}
-
-		self.timeout = time.Duration(timeoutFromDb) * time.Millisecond
 	}
+
+	result = dbConn.Where("name = ?", "enable").
+		First(&setting)
+	if result.Error == nil {
+		enableFromDb, err := strconv.Atoi(setting.Value)
+
+		if err != nil {
+			self.logger.Errorf(
+				"convert enable value fail: %v\n\nValue = %v (type %d)",
+				err,
+				setting.Value,
+				setting.Type,
+			)
+		} else if enableFromDb == 1 {
+			self.enable = true
+		} else {
+			self.enable = false
+		}
+	}
+
 	return nil
 }
 
@@ -127,6 +148,10 @@ func (self *toolboxImpl) Execute(args []string) error {
 	parser.SetOut(self.io)
 
 	cmd, _, err := parser.Find(args)
+
+	if !self.enable && args[len(args)-1] != "--help" && args[0] != "setting" {
+		return nil
+	}
 
 	if err != nil || cmd == nil {
 		records, err := search.Search(nil, strings.Join(args, " "))

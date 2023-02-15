@@ -1178,15 +1178,6 @@ func (self *apiImpl) Clean() error {
 	resp = dbConn.
 		Where("account = ?", self.uuid).
 		Delete(&FirewallBoundModel{Account: self.uuid})
-	if resp.Error != nil {
-		return resp.Error
-	}
-
-	resp = dbConn.Delete(&AccountModel{
-		BaseModel: BaseModel{
-			UUID: self.uuid,
-		},
-	})
 	return resp.Error
 }
 

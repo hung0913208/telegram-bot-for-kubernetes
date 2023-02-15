@@ -125,6 +125,10 @@ func (self *toolboxImpl) newKubernetesGetParser() *cobra.Command {
 				cnt := 0
 				for _, pod := range pods.Items {
 					self.Ok("%s -  %s", pod.ObjectMeta.Name, pod.Status.Phase)
+					for _, vol := range pod.Spec.Volumes {
+						self.Ok(" `->  %s", vol.Name)
+					}
+
 					cnt += 1
 					if cnt == 10 {
 						self.Flush()

@@ -16,6 +16,8 @@ import (
 type SettingToolbox interface {
 	SetTimeout(timeout string)
 	GetTimeout()
+	SetEnable(timeout string)
+	GetEnable()
 }
 
 type settingToolboxImpl struct {
@@ -71,6 +73,57 @@ func (self *settingToolboxImpl) SetTimeout(timeout string) {
 	self.toolbox.timeout = time.Duration(val) * time.Millisecond
 }
 
+func (self *settingToolboxImpl) SetEnable(enable string) {
+
+	dbModule, err := container.Pick("elephansql")
+	if err != nil {
+		self.toolbox.Fail(fmt.Sprintf("Fail get elephansql: %v", err))
+		return
+	}
+
+	dbConn, err := db.Establish(dbModule)
+	if err != nil {
+		self.toolbox.Fail(fmt.Sprintf("Fail establish gorm: %v", err))
+		return
+	}
+
+	setting := SettingModel{
+		Name: "enable",
+		Type: 1,
+	}
+
+	if enable == "true" || enable == "True" || enable == "TRUE" {
+		setting.Value = "1"
+
+		// @NOTE: save for future
+		self.toolbox.enable = true
+	} else {
+		setting.Value = "0"
+
+		// @NOTE: save for future
+		self.toolbox.enable = false
+	}
+
+	// @NOTE: update on conflict, improve performance while keep
+	//        everything safe
+	dbConn.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "name"}},
+		DoUpdates: clause.AssignmentColumns([]string{"value"}),
+	}).Create(&setting)
+}
+
+func (self *settingToolboxImpl) GetEnable() {
+	if self.toolbox.enable {
+		self.toolbox.Ok(
+			"enable = true",
+		)
+	} else {
+		self.toolbox.Ok(
+			"enable = false",
+		)
+	}
+}
+
 func (self *toolboxImpl) newSettingParser() *cobra.Command {
 	root := &cobra.Command{
 		Use:   "setting",
@@ -106,6 +159,22 @@ func (self *toolboxImpl) newSettingParser() *cobra.Command {
 				}
 
 				newSettingToolbox(self).SetTimeout(args[0])
+			},
+		),
+	})
+
+	root.AddCommand(&cobra.Command{
+		Use:   "enable",
+		Short: "Get/Set toolbox enable flag",
+		Run: self.GenerateSafeCallback(
+			"setting-timeout",
+			func(cmd *cobra.Command, args []string) {
+				if len(args) == 0 {
+					newSettingToolbox(self).GetEnable()
+					return
+				}
+
+				newSettingToolbox(self).SetEnable(args[0])
 			},
 		),
 	})
