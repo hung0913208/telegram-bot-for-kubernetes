@@ -16,6 +16,7 @@ type Kubernetes interface {
 	GetPods(namespace string) (*corev1.PodList, error)
 	GetAppPods(namespace string) (*corev1.PodList, error)
 	GetInfraPods(namespace string) (*corev1.PodList, error)
+    GetPVs() (*corev1.PersistentVolumeList, error)
 }
 
 type kubernetesImpl struct {
@@ -65,5 +66,13 @@ func (self *kubernetesImpl) GetInfraPods(namespace string) (*corev1.PodList, err
 			metav1.ListOptions{
 				LabelSelector: "app.kubernetes.io/managed-by=Helm",
 			},
+		)
+}
+
+func (self *kubernetesImpl) GetPVs() (*corev1.PersistentVolumeList, error) {
+	return self.client.CoreV1().PersistentVolumes().
+		List(
+			context.TODO(),
+			metav1.ListOptions{},
 		)
 }

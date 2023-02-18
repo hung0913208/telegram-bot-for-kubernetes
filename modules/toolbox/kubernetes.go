@@ -4,6 +4,8 @@ import (
 	"github.com/hung0913208/telegram-bot-for-kubernetes/lib/container"
 	"github.com/hung0913208/telegram-bot-for-kubernetes/modules/cluster"
 	"github.com/spf13/cobra"
+
+	corev1 "k8s.io/api/core/v1"
 )
 
 func (self *toolboxImpl) newKubernetesParser() *cobra.Command {
@@ -177,13 +179,42 @@ func (self *toolboxImpl) newKubernetesGetParser() *cobra.Command {
 					self.Fail("Fail get pods: %v", err)
 				}
 
+				pvs, err := client.GetPVs()
+				if err != nil {
+					self.Fail("Fail get pods: %v", err)
+				}
+
+				mapClaimToPV := make(map[string]corev1.PersistentVolume)
+				for _, pv := range pvs.Items {
+					mapClaimToPV[pv.Spec.ClaimRef.Name] = pv
+				}
+
 				cnt := 0
 				for _, pod := range pods.Items {
-					self.Ok("%s -  %s", pod.ObjectMeta.Name, pod.Status.Phase)
-					cnt += 1
-					if cnt == 10 {
-						self.Flush()
-						cnt = 0
+					ok := false
+
+					for _, vol := range pod.Spec.Volumes {
+						if vol.VolumeSource.PersistentVolumeClaim != nil {
+							ok = true
+							break
+						}
+					}
+
+					if ok {
+						self.Ok("%s -  %s", pod.ObjectMeta.Name, pod.Status.Phase)
+
+						for _, vol := range pod.Spec.Volumes {
+							pv, found := mapClaimToPV[vol.Name]
+							if found && pv.CSI != nil {
+								self.OK(" `-> %s - %s", vol.Name, pv.CSI.VolumeHandle)
+							}
+						}
+
+						cnt += 1
+						if cnt == 10 {
+							self.Flush()
+							cnt = 0
+						}
 					}
 				}
 			},

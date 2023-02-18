@@ -86,11 +86,13 @@ func (ServerModel) TableName() string {
 type VolumeModel struct {
 	BaseModel
 
-	Account string `gorm:"index:idx_account_id" json:"account"`
-	Type    string `json:"type"`
-	Server  string `gorm:"index:idx_server_id" json:"server_id"`
-	Status  string `json:"status"`
-	Zone    string `gorm:"index:idx_zone" json:"zone"`
+	Account     string `gorm:"index:idx_account_id" json:"account"`
+	Type        string `json:"type"`
+	Description string `json:"description"`
+	Size        int    `json:"size"`
+	Server      string `gorm:"index:idx_server_id" json:"server_id"`
+	Status      string `json:"status"`
+	Zone        string `gorm:"index:idx_zone" json:"zone"`
 }
 
 func (VolumeModel) TableName() string {

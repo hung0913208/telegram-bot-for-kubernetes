@@ -944,10 +944,12 @@ func (self *apiImpl) SyncVolume() error {
 				CreatedAt: createdTime,
 				UpdatedAt: updatedTime,
 			},
-			Account: self.uuid,
-			Type:    volume.VolumeType,
-			Status:  volume.Status,
-			Zone:    volume.AvailabilityZone,
+			Account:     self.uuid,
+			Type:        volume.VolumeType,
+			Status:      volume.Status,
+			Zone:        volume.AvailabilityZone,
+			Description: volume.Description,
+			Size:        volume.Size,
 		})
 	}
 
