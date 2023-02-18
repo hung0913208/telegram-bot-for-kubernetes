@@ -45,6 +45,8 @@ type Api interface {
 	SyncVolumeAttachment(serverId string) error
 
 	DetachCluster(clusterId string) error
+	DetachServer(serverId string) error
+	DetachPool(poolId string) error
 
 	LinkPodWithVolume(pod, cluster, volumeId string) error
 
@@ -87,6 +89,8 @@ func NewApiFromDatabase(host, region string, timeout time.Duration) ([]Api, erro
 		&PoolNodeModel{},
 		&ServerModel{},
 		&VolumeModel{},
+		&VolumeClusterModel{},
+		&VolumeServerModel{},
 		&FirewallModel{},
 		&FirewallBoundModel{},
 	)
@@ -950,7 +954,6 @@ func (self *apiImpl) SyncVolume() error {
 			Status:      volume.Status,
 			Zone:        volume.AvailabilityZone,
 			Description: volume.Description,
-			Size:        volume.Size,
 		})
 	}
 
@@ -1073,6 +1076,8 @@ func (self *apiImpl) SyncPoolNode(clusterId, poolId string) error {
 			Status:  node.Status,
 			Reason:  node.StatusReason,
 			Account: self.uuid,
+			Cluster: clusterId,
+			Pool:    poolId,
 		})
 
 		resp := dbConn.Model(&ServerModel{}).
@@ -1123,9 +1128,19 @@ func (self *apiImpl) LinkPodWithVolume(pod, cluster, volumeId string) error {
 		return err
 	}
 
-	resp := dbConn.Model(&VolumeModel{}).
-		Where("uuid = ?", volumeId).
-		Updates(map[string]interface{}{"pod": pod, "cluster": cluster})
+	resp := dbConn.FirstOrCreate(
+		&VolumeClusterModel{
+			Volume:  volumeId,
+			Account: self.uuid,
+			Pod:     pod,
+			Cluster: cluster,
+		},
+		VolumeClusterModel{
+			Volume:  volumeId,
+			Pod:     pod,
+			Cluster: cluster,
+		},
+	)
 	return resp.Error
 }
 
@@ -1140,9 +1155,84 @@ func (self *apiImpl) DetachCluster(clusterId string) error {
 		return err
 	}
 
-	resp := dbConn.Delete(&ClusterModel{
+	resp := dbConn.Where("account = ? and cluster = ?", self.uuid, clusterId).
+		Delete(&VolumeClusterModel{Account: self.uuid, Cluster: clusterId})
+	if resp.Error != nil {
+		return resp.Error
+	}
+
+	resp = dbConn.Where("account = ? and cluster = ?", self.uuid, clusterId).
+		Delete(&PoolNodeModel{Account: self.uuid, Cluster: clusterId})
+	if resp.Error != nil {
+		return resp.Error
+	}
+
+	resp = dbConn.Where("account = ? and cluster = ?", self.uuid, clusterId).
+		Delete(&ServerModel{Account: self.uuid, Cluster: clusterId})
+	if resp.Error != nil {
+		return resp.Error
+	}
+
+	resp = dbConn.Delete(&ClusterModel{
 		BaseModel: BaseModel{
 			UUID: clusterId,
+		},
+	})
+	return resp.Error
+}
+
+func (self *apiImpl) DetachPool(poolId string) error {
+	dbModule, err := container.Pick("elephansql")
+	if err != nil {
+		return err
+	}
+
+	dbConn, err := db.Establish(dbModule)
+	if err != nil {
+		return err
+	}
+
+	rows, err := dbConn.Model(&PoolNodeModel{}).
+		Where("pool = ?", poolId).
+		Rows()
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var record PoolNodeModel
+
+		err = dbConn.ScanRows(rows, &record)
+		if err != nil {
+			return err
+		}
+
+		err = self.DetachServer(record.Server)
+		if err != nil {
+			return err
+		}
+	}
+
+	resp := dbConn.Where("account = ? and pool = ?", self.uuid, poolId).
+		Delete(&PoolNodeModel{Account: self.uuid})
+	return resp.Error
+}
+
+func (self *apiImpl) DetachServer(serverId string) error {
+	dbModule, err := container.Pick("elephansql")
+	if err != nil {
+		return err
+	}
+
+	dbConn, err := db.Establish(dbModule)
+	if err != nil {
+		return err
+	}
+
+	resp := dbConn.Delete(&ServerModel{
+		BaseModel: BaseModel{
+			UUID: serverId,
 		},
 	})
 	return resp.Error
@@ -1190,6 +1280,18 @@ func (self *apiImpl) Clean() error {
 	}
 
 	resp = dbConn.Where("account = ?", self.uuid).
+		Delete(&VolumeClusterModel{Account: self.uuid})
+	if resp.Error != nil {
+		return resp.Error
+	}
+
+	resp = dbConn.Where("account = ?", self.uuid).
+		Delete(&VolumeServerModel{Account: self.uuid})
+	if resp.Error != nil {
+		return resp.Error
+	}
+
+	resp = dbConn.Where("account = ?", self.uuid).
 		Delete(&FirewallModel{Account: self.uuid})
 	if resp.Error != nil {
 		return resp.Error
@@ -1212,13 +1314,25 @@ func (self *apiImpl) updateVolumeAttachment(server *api.Server) error {
 		return err
 	}
 
+	volumeServerRecords := make([]VolumeServerModel, 0)
+
 	for _, volume := range server.AttachedVolumes {
-		resp := dbConn.Model(&VolumeModel{}).
-			Where("uuid = ?", volume.ID).
-			Update("server", server.ID)
-		if resp.Error != nil {
-			return resp.Error
-		}
+		volumeServerRecords = append(volumeServerRecords,
+			VolumeServerModel{
+				Volume:  volume.ID,
+				Server:  server.ID,
+				Account: self.uuid,
+			},
+		)
 	}
-	return nil
+
+	batchSize, err := strconv.Atoi(os.Getenv("GORM_BATCH_SIZE"))
+	if err != nil {
+		batchSize = 100
+	}
+
+	resp := dbConn.
+		Clauses(clause.OnConflict{UpdateAll: true}).
+		CreateInBatches(volumeServerRecords, batchSize)
+	return resp.Error
 }

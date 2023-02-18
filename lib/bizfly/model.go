@@ -59,6 +59,8 @@ type PoolNodeModel struct {
 
 	Name    string `json:"name"`
 	Account string `gorm:"index:idx_account_id" json:"account"`
+	Pool    string `gorm:"index:idx_pool_id" json:"pool"`
+	Cluster string `gorm:"index:idx_cluster_id" json:"cluster"`
 	Server  string `gorm:"index:idx_server_id" json:"physical_id"`
 	Status  string `gorm:"index:idx_status" json:"status"`
 	Reason  string `json:"reason"`
@@ -89,16 +91,34 @@ type VolumeModel struct {
 	Account     string `gorm:"index:idx_account_id" json:"account"`
 	Type        string `json:"type"`
 	Description string `json:"description"`
-	Size        int    `json:"size"`
-	Server      string `gorm:"index:idx_server_id" json:"server_id"`
 	Status      string `json:"status"`
 	Zone        string `gorm:"index:idx_zone" json:"zone"`
-	Pod         string `gorm:"index:idx_pod" json:"pod"`
-	Cluster     string `gorm:"index:idx_cluster" json:"cluster"`
 }
 
 func (VolumeModel) TableName() string {
 	return "tbl_bizfly_volume"
+}
+
+type VolumeServerModel struct {
+	Volume  string `gorm:"primaryKey" json:"volume_id"`
+	Account string `gorm:"index:idx_account_id" json:"account"`
+	Server  string `gorm:"index:idx_server_id" json:"server_id"`
+}
+
+func (VolumeServerModel) TableName() string {
+	return "tbl_bizfly_volume_server"
+}
+
+type VolumeClusterModel struct {
+	Volume  string `gorm:"primaryKey" json:"volume_id"`
+	Account string `gorm:"index:idx_account_id" json:"account"`
+	Pod     string `gorm:"index:idx_pod" json:"pod"`
+	Cluster string `gorm:"index:idx_cluster" json:"cluster"`
+	Size    int    `json:"size"`
+}
+
+func (VolumeClusterModel) TableName() string {
+	return "tbl_bizfly_volume_cluster"
 }
 
 type FirewallModel struct {
