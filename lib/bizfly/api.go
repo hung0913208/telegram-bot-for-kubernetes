@@ -48,7 +48,7 @@ type Api interface {
 	DetachServer(serverId string) error
 	DetachPool(poolId string) error
 
-	LinkPodWithVolume(pod, cluster, volumeId string) error
+	LinkPodWithVolume(pod, cluster, volumeId string, size int) error
 
 	// AdjustVolume() error
 	// AdjustPool() error
@@ -1117,7 +1117,9 @@ func (self *apiImpl) SyncVolumeAttachment(serverId string) error {
 	return self.updateVolumeAttachment(server.(*api.Server))
 }
 
-func (self *apiImpl) LinkPodWithVolume(pod, cluster, volumeId string) error {
+func (self *apiImpl) LinkPodWithVolume(
+	pod, cluster, volumeId string, size int,
+) error {
 	dbModule, err := container.Pick("elephansql")
 	if err != nil {
 		return err
@@ -1134,11 +1136,12 @@ func (self *apiImpl) LinkPodWithVolume(pod, cluster, volumeId string) error {
 			Account: self.uuid,
 			Pod:     pod,
 			Cluster: cluster,
+			Size:    size,
 		},
 		VolumeClusterModel{
-			Volume:  volumeId,
 			Pod:     pod,
 			Cluster: cluster,
+			Size:    size,
 		},
 	)
 	return resp.Error
