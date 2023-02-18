@@ -204,9 +204,14 @@ func (self *toolboxImpl) newKubernetesGetParser() *cobra.Command {
 						self.Ok("%s -  %s", pod.ObjectMeta.Name, pod.Status.Phase)
 
 						for _, vol := range pod.Spec.Volumes {
-							pv, found := mapClaimToPV[vol.Name]
-							if found && pv.CSI != nil {
-								self.OK(" `-> %s - %s", vol.Name, pv.CSI.VolumeHandle)
+							if vol.PersistentVolumeClaim == nil {
+								continue
+							}
+
+							pv, found := mapClaimToPV[vol.PersistentVolumeClaim.ClaimName]
+
+							if found && pv.Spec.CSI != nil {
+								self.Ok(" `-> %s - %s", vol.Name, pv.Spec.CSI.VolumeHandle)
 							}
 						}
 

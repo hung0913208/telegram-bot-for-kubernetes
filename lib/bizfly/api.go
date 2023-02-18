@@ -46,6 +46,8 @@ type Api interface {
 
 	DetachCluster(clusterId string) error
 
+	LinkPodWithVolume(pod, cluster, volumeId string) error
+
 	// AdjustVolume() error
 	// AdjustPool() error
 	// AdjustAlert() error
@@ -351,7 +353,6 @@ func (self *apiImpl) GetKubeconfig(clusterId string) (string, error) {
 		self.ctx,
 		clusterId,
 	)
-	fmt.Println(len(kubeconfig))
 
 	return kubeconfig, err
 }
@@ -1109,6 +1110,23 @@ func (self *apiImpl) SyncVolumeAttachment(serverId string) error {
 	}
 
 	return self.updateVolumeAttachment(server.(*api.Server))
+}
+
+func (self *apiImpl) LinkPodWithVolume(pod, cluster, volumeId string) error {
+	dbModule, err := container.Pick("elephansql")
+	if err != nil {
+		return err
+	}
+
+	dbConn, err := db.Establish(dbModule)
+	if err != nil {
+		return err
+	}
+
+	resp := dbConn.Model(&VolumeModel{}).
+		Where("uuid = ?", volumeId).
+		Updates(map[string]interface{}{"pod": pod, "cluster": cluster})
+	return resp.Error
 }
 
 func (self *apiImpl) DetachCluster(clusterId string) error {

@@ -93,6 +93,8 @@ type VolumeModel struct {
 	Server      string `gorm:"index:idx_server_id" json:"server_id"`
 	Status      string `json:"status"`
 	Zone        string `gorm:"index:idx_zone" json:"zone"`
+	Pod         string `gorm:"index:idx_pod" json:"pod"`
+	Cluster     string `gorm:"index:idx_cluster" json:"cluster"`
 }
 
 func (VolumeModel) TableName() string {

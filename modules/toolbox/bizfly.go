@@ -7,6 +7,8 @@ import (
 	"github.com/hung0913208/telegram-bot-for-kubernetes/lib/bizfly"
 	"github.com/hung0913208/telegram-bot-for-kubernetes/modules/cluster"
 	"github.com/spf13/cobra"
+
+	corev1 "k8s.io/api/core/v1"
 )
 
 type BizflyToolbox interface {
@@ -160,10 +162,10 @@ func (self *bizflyToolboxImpl) Sync(resource, account string) {
 		return
 	}
 
-	for _, client := range clients {
+	for _, bizflycli := range clients {
 		switch resource {
 		case "cluster":
-			clusters, err := client.ListCluster()
+			clusters, err := bizflycli.ListCluster()
 			if err != nil {
 				self.toolbox.Fail("Can't get list clusters: %v", err)
 				return
@@ -171,10 +173,10 @@ func (self *bizflyToolboxImpl) Sync(resource, account string) {
 
 			for _, clusterObj := range clusters {
 				tenant, err := bizfly.NewTenant(
-					client,
+					bizflycli,
 					clusterObj,
 				)
-				if err != nil && client.DetachCluster(clusterObj.UID) != nil {
+				if err != nil && bizflycli.DetachCluster(clusterObj.UID) != nil {
 					self.toolbox.Fail("Can't init cluster %s: %v", clusterObj.UID, err)
 					ok = false
 					continue
@@ -195,10 +197,69 @@ func (self *bizflyToolboxImpl) Sync(resource, account string) {
 					ok = false
 					continue
 				}
+
+				kubectl, err := tenant.GetClient()
+				if err != nil {
+					self.toolbox.Fail("Get client got error: %v", err)
+					ok = false
+					return
+				}
+
+				pods, err := kubectl.GetPods("")
+				if err != nil {
+					self.toolbox.Fail("Fail get pods: %v", err)
+					ok = false
+					continue
+				}
+
+				pvs, err := kubectl.GetPVs()
+				if err != nil {
+					self.toolbox.Fail("Fail get persistent volumes: %v", err)
+					ok = false
+					continue
+				}
+
+				mapClaimToPV := make(map[string]corev1.PersistentVolume)
+				for _, pv := range pvs.Items {
+					mapClaimToPV[pv.Spec.ClaimRef.Name] = pv
+				}
+
+				for _, pod := range pods.Items {
+					ok := false
+
+					for _, vol := range pod.Spec.Volumes {
+						if vol.VolumeSource.PersistentVolumeClaim != nil {
+							ok = true
+							break
+						}
+					}
+
+					if ok {
+						for _, vol := range pod.Spec.Volumes {
+							if vol.PersistentVolumeClaim == nil {
+								continue
+							}
+
+							pv, found := mapClaimToPV[vol.PersistentVolumeClaim.ClaimName]
+
+							if found && pv.Spec.CSI != nil {
+								err = bizflycli.LinkPodWithVolume(
+									pod.Name,
+									tenant.GetName(),
+									pv.Spec.CSI.VolumeHandle,
+								)
+								if err != nil {
+									self.toolbox.Fail("Fail linking pod with volume: %v", err)
+									return
+								}
+							}
+						}
+					}
+				}
 			}
 
 		case "pool":
-			clusters, err := client.ListCluster()
+			clusters, err := bizflycli.ListCluster()
 			if err != nil {
 				self.toolbox.Fail("Can't get list clusters: %v", err)
 				ok = false
@@ -206,7 +267,7 @@ func (self *bizflyToolboxImpl) Sync(resource, account string) {
 			}
 
 			for _, clusterObj := range clusters {
-				if err := client.SyncPool(clusterObj.UID); err != nil {
+				if err := bizflycli.SyncPool(clusterObj.UID); err != nil {
 					self.toolbox.Fail("Fail syncing pool of %s: %v",
 						clusterObj.UID,
 						err,
@@ -217,14 +278,14 @@ func (self *bizflyToolboxImpl) Sync(resource, account string) {
 			}
 
 		case "node-pool":
-			clusters, err := client.ListCluster()
+			clusters, err := bizflycli.ListCluster()
 			if err != nil {
 				self.toolbox.Fail("Can't get list clusters: %v", err)
 				return
 			}
 
 			for _, clusterObj := range clusters {
-				pools, err := client.ListPool(clusterObj.UID)
+				pools, err := bizflycli.ListPool(clusterObj.UID)
 				if err != nil {
 					self.toolbox.Fail("Can't get list pools: %v", err)
 					ok = false
@@ -232,7 +293,7 @@ func (self *bizflyToolboxImpl) Sync(resource, account string) {
 				}
 
 				for _, pool := range pools {
-					if err := client.SyncPoolNode(clusterObj.UID, pool.UID); err != nil {
+					if err := bizflycli.SyncPoolNode(clusterObj.UID, pool.UID); err != nil {
 						self.toolbox.Fail("Fail syncing pool %s cluster %s: %v",
 							pool.UID,
 							clusterObj.Name,
@@ -245,28 +306,28 @@ func (self *bizflyToolboxImpl) Sync(resource, account string) {
 			}
 
 		case "kubernetes":
-			err := client.SyncCluster()
+			err := bizflycli.SyncCluster()
 			if err != nil {
 				self.toolbox.Fail("synchronize resource `kubernetes` fail: %v", err)
 				return
 			}
 
 		case "server":
-			err := client.SyncServer()
+			err := bizflycli.SyncServer()
 			if err != nil {
 				self.toolbox.Fail("synchronize resource `server` fail: %v", err)
 				return
 			}
 
 		case "volume":
-			err := client.SyncVolume()
+			err := bizflycli.SyncVolume()
 			if err != nil {
 				self.toolbox.Fail("synchronize resource `volume` fail: %v", err)
 				return
 			}
 
 		case "firewall":
-			err := client.SyncFirewall()
+			err := bizflycli.SyncFirewall()
 			if err != nil {
 				self.toolbox.Fail("synchronize resource `firewall` fail: %v", err)
 				return
