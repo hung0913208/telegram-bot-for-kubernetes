@@ -16,8 +16,10 @@ type Kubernetes interface {
 	GetPods(namespace string) (*corev1.PodList, error)
 	GetAppPods(namespace string) (*corev1.PodList, error)
 	GetInfraPods(namespace string) (*corev1.PodList, error)
+	GetNodes() (*corev1.NodeList, error)
 	GetPVs() (*corev1.PersistentVolumeList, error)
 	GetPodMetrics() (*PodMetricsList, error)
+	GetNodeMetrics(node string) (*NodeMetricsList, error)
 	Ping() bool
 }
 
@@ -85,4 +87,8 @@ func (self *kubernetesImpl) GetPVs() (*corev1.PersistentVolumeList, error) {
 			context.TODO(),
 			metav1.ListOptions{},
 		)
+}
+
+func (self *kubernetesImpl) GetNodes() (*corev1.NodeList, error) {
+	return self.client.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
 }

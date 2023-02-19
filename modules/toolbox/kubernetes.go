@@ -2,6 +2,7 @@ package toolbox
 
 import (
 	"github.com/hung0913208/telegram-bot-for-kubernetes/lib/container"
+	"github.com/hung0913208/telegram-bot-for-kubernetes/lib/kubernetes"
 	"github.com/hung0913208/telegram-bot-for-kubernetes/modules/cluster"
 	"github.com/spf13/cobra"
 
@@ -124,6 +125,8 @@ func (self *toolboxImpl) newKubernetesGetParser() *cobra.Command {
 					self.Fail("Fail get pods: %v", err)
 				}
 
+				metrics, err := client.GetPodMetrics()
+
 				pvs, err := client.GetPVs()
 				if err != nil {
 					self.Fail("Fail get pods: %v", err)
@@ -132,6 +135,16 @@ func (self *toolboxImpl) newKubernetesGetParser() *cobra.Command {
 				mapClaimToPV := make(map[string]corev1.PersistentVolume)
 				for _, pv := range pvs.Items {
 					mapClaimToPV[pv.Spec.ClaimRef.Name] = pv
+				}
+
+				mapPodToMetric := make(map[string][]kubernetes.Container)
+
+				for _, item := range metrics.Items {
+					if len(ns) > 0 && ns != item.Metadata.Namespace {
+						continue
+					}
+
+					mapPodToMetric[item.Metadata.Name] = item.Containers
 				}
 
 				cnt := 0
@@ -281,6 +294,7 @@ func (self *toolboxImpl) newKubernetesGetParser() *cobra.Command {
 				pods, err := client.GetAppPods(ns)
 				if err != nil {
 					self.Fail("Fail get pods: %v", err)
+					return
 				}
 
 				cnt := 0
@@ -298,9 +312,76 @@ func (self *toolboxImpl) newKubernetesGetParser() *cobra.Command {
 	getAppPodsCmd.PersistentFlags().
 		String("namespace", "default", "The k8s namespace we would like to access")
 
+	getPvcCmd := &cobra.Command{
+		Use:   "pvc",
+		Short: "Get list of application pods",
+		Run: self.GenerateSafeCallback(
+			"k8s-get-pvc-metric",
+			func(cmd *cobra.Command, args []string) {
+				clusterMgr, err := container.Pick("cluster")
+				if err != nil {
+					self.Fail("Get cluster got error: %v", err)
+					return
+				}
+
+				tenant, err := cluster.Pick(clusterMgr, args[0])
+				if err != nil {
+					self.Fail("Pick %s got error: %v", args[0], err)
+					return
+				}
+
+				client, err := tenant.GetClient()
+				if err != nil {
+					self.Fail("Get client got error: %v", err)
+					return
+				}
+
+				nodes, err := client.GetNodes()
+				if err != nil {
+					self.Fail("Fail get nodes: %v", err)
+					return
+				}
+				cnt := 0
+				for _, node := range nodes.Items {
+					metric, err := client.GetNodeMetrics(node.Name)
+					if err != nil {
+						self.Fail("Fail get metric of %s: %v", node.Name, err)
+						continue
+					}
+
+					self.Ok("## Node %s:", node.Name)
+
+					for _, pod := range metric.Pods {
+						self.Ok("- Pod %s:", pod.PodRef.Name)
+
+						for _, volume := range pod.Volumes {
+							self.Ok(
+								"  - Volume %s:\n"+
+									"    - Used %dM\n"+
+									"    - Capacity: %dM\n"+
+									"    - Available: %dM",
+								volume.Name,
+								volume.UsedBytes/1048576,
+								volume.CapacityBytes/1048576,
+								volume.AvailableBytes/1048576,
+							)
+						}
+
+						cnt += 1
+						if cnt == 10 {
+							self.Flush()
+							cnt = 0
+						}
+					}
+				}
+			},
+		),
+	}
+
 	root.AddCommand(getClustersCmd)
 	root.AddCommand(getPodsCmd)
 	root.AddCommand(getAppPodsCmd)
 	root.AddCommand(getInfraPodsCmd)
+	root.AddCommand(getPvcCmd)
 	return root
 }
