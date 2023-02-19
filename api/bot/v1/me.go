@@ -36,10 +36,21 @@ var (
 )
 
 func init() {
-	timeout, err := strconv.Atoi(os.Getenv("TIMEOUT"))
-	if err != nil {
-		timeout = 200
-	}
+    timeouts := []string{"100","2","1000"}
+
+    if len(os.Getenv("TIMEOUT")) > 0 {
+        timeouts = strings.Split(os.Getenv("TIMEOUT"), ",")
+    }
+
+    timeoutDb, err := strconv.Atoi(timeouts[0])
+    if err != nil {
+        timeoutDb = 100
+    }
+
+    timeoutModule, err := strconv.Atoi(timeouts[0])
+    if err != nil {
+        timeoutModule = 1000
+    }
 
 	outputs = make([]string, 0)
 
@@ -81,7 +92,7 @@ func init() {
 	err = container.RegisterSimpleModule(
 		"elephansql",
 		elephansql,
-		timeout,
+        timeoutDb,
 	)
 	if err != nil {
 		container.Terminate("Can't register module `elephansql`", ErrorRegisterSql)
@@ -92,7 +103,11 @@ func init() {
 		container.Terminate(fmt.Sprintf("new cluster fail: %v", err), ErrorInitContainer)
 	}
 
-	err = container.RegisterSimpleModule("cluster", clusterModule, timeout)
+	err = container.RegisterSimpleModule(
+        "cluster", 
+        clusterModule, 
+        timeoutModule,
+    )
 	if err != nil {
 		container.Terminate(
 			fmt.Sprintf("Can't register module `cluster`: %v", err),
@@ -103,7 +118,7 @@ func init() {
 	err = container.RegisterSimpleModule(
 		"toolbox",
 		toolbox.NewToolbox(input, &outputs),
-		timeout,
+        timeoutModule,
 	)
 	if err != nil {
 		container.Terminate(fmt.Sprintf("Can't register module `toolbox`: %v", err),

@@ -105,6 +105,7 @@ type VolumeModel struct {
 	Type        string `json:"type"`
 	Description string `json:"description"`
 	Status      string `json:"status"`
+    Size        int    `json:"size"`
 }
 
 func (VolumeModel) TableName() string {

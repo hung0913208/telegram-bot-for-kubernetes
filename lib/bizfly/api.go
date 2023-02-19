@@ -558,6 +558,7 @@ func (self *apiImpl) ListVolume(serverId ...string) ([]*api.Volume, error) {
 
 		volumes = append(volumes, &api.Volume{
 			ID:         record.UUID,
+			Size:       record.Size,
 			Status:     record.Status,
 			VolumeType: record.Type,
 		})
@@ -911,7 +912,7 @@ func (self *apiImpl) SyncVolume() error {
 	}
 
 	volumes, err := callBizflyApiWithMeasurement(
-		"list-kubernertes-engine",
+		"sync-volume",
 		func() (interface{}, error) {
 			return self.client.Volume.List(self.ctx, nil)
 		},
@@ -958,6 +959,7 @@ func (self *apiImpl) SyncVolume() error {
 			Status:      volume.Status,
 			Zone:        volume.AvailabilityZone,
 			Description: volume.Description,
+			Size:        volume.Size,
 		})
 	}
 
@@ -969,7 +971,7 @@ func (self *apiImpl) SyncVolume() error {
 	resp := dbConn.
 		Clauses(clause.OnConflict{
 			Columns:   []clause.Column{{Name: "uuid"}},
-			DoUpdates: clause.AssignmentColumns([]string{"status", "updated_at"}),
+			DoUpdates: clause.AssignmentColumns([]string{"status", "updated_at", "size"}),
 		}).
 		CreateInBatches(volumeRecords, batchSize)
 	return resp.Error

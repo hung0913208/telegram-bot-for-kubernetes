@@ -566,10 +566,11 @@ func (self *bizflyToolboxImpl) PrintVolume(
 					}
 
 					self.toolbox.Ok(
-						"- Volume: %s (type %s), status %s",
+						"- Volume: %s (type %s), status %s, size %dG",
 						volume.ID,
 						volume.VolumeType,
 						volume.Status,
+                        volume.Size,
 					)
 					cnt += 1
 					if cnt > 10 {
