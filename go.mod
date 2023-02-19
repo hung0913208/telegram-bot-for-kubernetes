@@ -7,6 +7,7 @@ require (
 	github.com/getsentry/sentry-go v0.17.0
 	github.com/go-redis/redis v6.15.9+incompatible
 	github.com/gocolly/colly/v2 v2.1.0
+	github.com/gomarkdown/markdown v0.0.0-20221013030248-663e2500819c
 	github.com/spf13/cobra v1.6.1
 	golang.org/x/time v0.0.0-20220922220347-f3bd1da661af
 	gorm.io/driver/mysql v1.4.5

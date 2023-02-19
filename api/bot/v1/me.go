@@ -11,6 +11,8 @@ import (
 	"time"
 
 	sentry "github.com/getsentry/sentry-go"
+	mdparser "github.com/gomarkdown/markdown/parser"
+	md "github.com/gomarkdown/markdown"
 
 	"github.com/hung0913208/telegram-bot-for-kubernetes/lib/container"
 	"github.com/hung0913208/telegram-bot-for-kubernetes/lib/db"
@@ -204,6 +206,9 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if needAnswer {
+        extensions := mdparser.CommonExtensions | mdparser.AutoHeadingIDs
+        parser := mdparser.NewWithExtensions(extensions)
+
 		err = bot.Execute(strings.Split(input, " "))
 		if err != nil && len(outputs) == 0 {
 			outputs = append(outputs, fmt.Sprintf("%v", err))
@@ -214,7 +219,10 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		for _, output := range outputs {
-			err = me.ReplyMessage(msg.Chat.ID, output)
+			err = me.ReplyMessage(
+                msg.Chat.ID, 
+                string(md.ToHTML([]byte(output), parser, nil)),
+            )
 
 			if err != nil {
 				if len(output) > 0 {
