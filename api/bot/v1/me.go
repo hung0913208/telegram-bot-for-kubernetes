@@ -11,8 +11,6 @@ import (
 	"time"
 
 	sentry "github.com/getsentry/sentry-go"
-	mdparser "github.com/gomarkdown/markdown/parser"
-	md "github.com/gomarkdown/markdown"
 
 	"github.com/hung0913208/telegram-bot-for-kubernetes/lib/container"
 	"github.com/hung0913208/telegram-bot-for-kubernetes/lib/db"
@@ -206,9 +204,6 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if needAnswer {
-        extensions := mdparser.CommonExtensions | mdparser.AutoHeadingIDs
-        parser := mdparser.NewWithExtensions(extensions)
-
 		err = bot.Execute(strings.Split(input, " "))
 		if err != nil && len(outputs) == 0 {
 			outputs = append(outputs, fmt.Sprintf("%v", err))
@@ -219,10 +214,58 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		for _, output := range outputs {
+			rendered := ""
+
+			for _, line := range strings.Split(output, "\n") {
+				firstChar := true
+				hashCnt := 0
+				starCnt := 3
+				fixed := make([]byte, 0)
+
+				for i := 0; i < len(line); i++ {
+					if firstChar {
+						if line[i] == '#' {
+							hashCnt++
+							continue
+						} else if hashCnt > 0 || line[i] != ' ' {
+							firstChar = false
+
+							if hashCnt > 2 {
+								starCnt = 2
+							} else if hashCnt == 0 {
+								starCnt = 0
+							}
+
+							for j := starCnt; j > 0; j-- {
+								fixed = append(fixed, '*')
+							}
+						}
+					}
+
+					if !firstChar {
+						for _, c := range []byte("#([])-.=") {
+							if c == line[i] {
+								fixed = append(fixed, '\\')
+							}
+						}
+					}
+
+					fixed = append(fixed, line[i])
+				}
+
+				if len(fixed) > 0 {
+					for j := starCnt; j > 0; j-- {
+						fixed = append(fixed, '*')
+					}
+				}
+
+				rendered += (string(fixed) + "\n")
+			}
+
 			err = me.ReplyMessage(
-                msg.Chat.ID, 
-                string(md.ToHTML([]byte(output), parser, nil)),
-            )
+				msg.Chat.ID,
+				rendered,
+			)
 
 			if err != nil {
 				if len(output) > 0 {
@@ -237,7 +280,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 						"reply message to %d fail: \n\n%v\n\nOutput:\n%s",
 						updateMsg.Message.Chat.ID,
 						err,
-						output,
+						rendered,
 					),
 				)
 				return

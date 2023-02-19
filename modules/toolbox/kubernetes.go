@@ -124,11 +124,31 @@ func (self *toolboxImpl) newKubernetesGetParser() *cobra.Command {
 					self.Fail("Fail get pods: %v", err)
 				}
 
+				pvs, err := client.GetPVs()
+				if err != nil {
+					self.Fail("Fail get pods: %v", err)
+				}
+
+				mapClaimToPV := make(map[string]corev1.PersistentVolume)
+				for _, pv := range pvs.Items {
+					mapClaimToPV[pv.Spec.ClaimRef.Name] = pv
+				}
+
 				cnt := 0
 				for _, pod := range pods.Items {
-					self.Ok("%s -  %s", pod.ObjectMeta.Name, pod.Status.Phase)
+					self.Ok("- Pod %s:  %s", pod.ObjectMeta.Name, pod.Status.Phase)
+
 					for _, vol := range pod.Spec.Volumes {
-						self.Ok(" `->  %s", vol.Name)
+						if vol.PersistentVolumeClaim == nil {
+							self.Ok("  - Volume: %s", vol.Name)
+							continue
+						}
+
+						pv, found := mapClaimToPV[vol.PersistentVolumeClaim.ClaimName]
+
+						if found && pv.Spec.CSI != nil {
+							self.Ok("  - Volume: %s link to %s", vol.Name, pv.Spec.CSI.VolumeHandle)
+						}
 					}
 
 					cnt += 1
@@ -201,7 +221,7 @@ func (self *toolboxImpl) newKubernetesGetParser() *cobra.Command {
 					}
 
 					if ok {
-						self.Ok("%s -  %s", pod.ObjectMeta.Name, pod.Status.Phase)
+						self.Ok("- Pod %s:  %s", pod.ObjectMeta.Name, pod.Status.Phase)
 
 						for _, vol := range pod.Spec.Volumes {
 							if vol.PersistentVolumeClaim == nil {
@@ -211,7 +231,7 @@ func (self *toolboxImpl) newKubernetesGetParser() *cobra.Command {
 							pv, found := mapClaimToPV[vol.PersistentVolumeClaim.ClaimName]
 
 							if found && pv.Spec.CSI != nil {
-								self.Ok(" `-> %s - %s", vol.Name, pv.Spec.CSI.VolumeHandle)
+								self.Ok("  - Volume: %s link to %s", vol.Name, pv.Spec.CSI.VolumeHandle)
 							}
 						}
 
@@ -265,7 +285,7 @@ func (self *toolboxImpl) newKubernetesGetParser() *cobra.Command {
 
 				cnt := 0
 				for _, pod := range pods.Items {
-					self.Ok("%s -  %s", pod.ObjectMeta.Name, pod.Status.Phase)
+					self.Ok("- Pod %s:  %s", pod.ObjectMeta.Name, pod.Status.Phase)
 					cnt += 1
 					if cnt == 10 {
 						self.Flush()

@@ -2,6 +2,7 @@ package toolbox
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/hung0913208/telegram-bot-for-kubernetes/lib/bizfly"
@@ -352,6 +353,8 @@ func (self *bizflyToolboxImpl) PrintCluster(account, project string) {
 		return
 	}
 
+	self.toolbox.Ok("## List clusters:\n")
+
 	for _, client := range clients {
 		if client.GetProjectId() != project {
 			continue
@@ -363,12 +366,16 @@ func (self *bizflyToolboxImpl) PrintCluster(account, project string) {
 			return
 		}
 
+		self.toolbox.Ok("### Project %s", client.GetProjectId())
+
 		for _, cluster := range clusters {
 			self.toolbox.Ok(
-				" +  %s - %s - %s - %v",
-				cluster.UID,
+				"- %s: %s\n"+
+					"  - UID: %s\n"+
+					"  - Alias: %v\n\n",
 				cluster.Name,
 				cluster.ClusterStatus,
+				cluster.UID,
 				cluster.Tags,
 			)
 		}
@@ -383,6 +390,8 @@ func (self *bizflyToolboxImpl) PrintPool(account, project, clusterName string) {
 		return
 	}
 
+	self.toolbox.Ok("## List pools:\n")
+
 	for _, client := range clients {
 		if client.GetProjectId() != project {
 			continue
@@ -393,6 +402,8 @@ func (self *bizflyToolboxImpl) PrintPool(account, project, clusterName string) {
 			self.toolbox.Fail("Can't get list clusters: %v", err)
 			return
 		}
+
+		self.toolbox.Ok("### Project %s", client.GetProjectId())
 
 		for _, clusterObj := range clusters {
 			if len(clusterName) > 0 && clusterObj.Name != clusterName {
@@ -407,9 +418,9 @@ func (self *bizflyToolboxImpl) PrintPool(account, project, clusterName string) {
 
 			for _, pool := range pools {
 				self.toolbox.Ok(
-					" +  %s - %s - %s",
-					pool.UID,
-					clusterObj.Name,
+					"- %s: %s\n"+
+						"  - Cluster: %s\n"+
+						pool.UID,
 					pool.ProvisionStatus,
 				)
 			}
@@ -424,6 +435,8 @@ func (self *bizflyToolboxImpl) PrintServer(account, project, clusterName string)
 		return
 	}
 
+	self.toolbox.Ok("## List servers:\n")
+
 	for _, client := range clients {
 		if client.GetProjectId() != project {
 			continue
@@ -435,6 +448,8 @@ func (self *bizflyToolboxImpl) PrintServer(account, project, clusterName string)
 			return
 		}
 
+		self.toolbox.Ok("### Project %s", client.GetProjectId())
+
 		if len(clusterName) == 0 {
 			servers, err := client.ListServer()
 			if err != nil {
@@ -442,12 +457,27 @@ func (self *bizflyToolboxImpl) PrintServer(account, project, clusterName string)
 				return
 			}
 
-			for _, server := range servers {
+			for i, server := range servers {
+				name := fmt.Sprintf("NONAME #%d", i)
+
+				if len(server.Name) > 0 {
+					name = server.Name
+				}
+
 				self.toolbox.Ok(
-					" +  %s - %s",
+					"- %s (ID = %s): %s",
+					name,
 					server.ID,
 					server.Status,
 				)
+
+				for _, vol := range server.AttachedVolumes {
+					self.toolbox.Ok(
+						"  - Volume: %s (type %s)",
+						vol.ID,
+						vol.Type,
+					)
+				}
 			}
 		} else {
 			for _, clusterObj := range clusters {
@@ -461,12 +491,26 @@ func (self *bizflyToolboxImpl) PrintServer(account, project, clusterName string)
 					return
 				}
 
-				for _, server := range servers {
+				for i, server := range servers {
+					name := fmt.Sprintf("NONAME #%d", i)
+
+					if len(server.Name) > 0 {
+						name = server.Name
+					}
 					self.toolbox.Ok(
-						" +  %s - %s",
+						"- %s (ID = %s): %s",
+						name,
 						server.ID,
 						server.Status,
 					)
+
+					for _, vol := range server.AttachedVolumes {
+						self.toolbox.Ok(
+							"  - Volume: %s (type %s)",
+							vol.ID,
+							vol.Type,
+						)
+					}
 				}
 			}
 		}
@@ -483,6 +527,8 @@ func (self *bizflyToolboxImpl) PrintVolume(
 		return
 	}
 
+	self.toolbox.Ok("## List volumes:\n")
+
 	for _, client := range clients {
 		if client.GetProjectId() != project {
 			continue
@@ -493,6 +539,8 @@ func (self *bizflyToolboxImpl) PrintVolume(
 			self.toolbox.Fail("Can't get list clusters: %v", err)
 			return
 		}
+
+		self.toolbox.Ok("### Project %s", client.GetProjectId())
 
 		if len(clusterName) == 0 {
 			servers, err := client.ListServer()
@@ -518,8 +566,9 @@ func (self *bizflyToolboxImpl) PrintVolume(
 					}
 
 					self.toolbox.Ok(
-						" +  %s - %s",
+						"- Volume: %s (type %s), status %s",
 						volume.ID,
+						volume.VolumeType,
 						volume.Status,
 					)
 					cnt += 1
@@ -557,8 +606,9 @@ func (self *bizflyToolboxImpl) PrintVolume(
 						}
 
 						self.toolbox.Ok(
-							" +  %s - %s",
+							"- Volume: %s (type %s), status %s",
 							volume.ID,
+							volume.VolumeType,
 							volume.Status,
 						)
 						cnt += 1
@@ -575,7 +625,7 @@ func (self *bizflyToolboxImpl) PrintVolume(
 
 func (self *bizflyToolboxImpl) PrintAll(detail bool) {
 	for name, clients := range self.toolbox.bizflyApi {
-		self.toolbox.Ok("Detail info of %s", name)
+		self.toolbox.Ok("# Detail info of %s", name)
 
 		for _, client := range clients {
 			volumes, err := client.ListVolume()
@@ -594,14 +644,16 @@ func (self *bizflyToolboxImpl) PrintAll(detail bool) {
 			}
 
 			if len(clusters) > 0 {
-				self.toolbox.Ok("List clusters:\n")
+				self.toolbox.Ok("### List clusters:\n")
 
 				for _, cluster := range clusters {
 					self.toolbox.Ok(
-						" + %s - %s - %s - %v",
-						cluster.UID,
+						"- %s: %s\n"+
+							"  - UID: %s\n"+
+							"  - Alias: %v\n",
 						cluster.Name,
 						cluster.ClusterStatus,
+						cluster.UID,
 						cluster.Tags,
 					)
 				}
@@ -610,20 +662,20 @@ func (self *bizflyToolboxImpl) PrintAll(detail bool) {
 			}
 
 			if len(servers) > 0 {
-				self.toolbox.Ok("List servers:\n")
+				self.toolbox.Ok("### List servers:\n")
 
 				for _, server := range servers {
 					self.toolbox.Ok(
-						" + %s - %s - %s",
-						server.ID,
+						"- %s (ID = %s): %s",
 						server.Name,
+						server.ID,
 						server.Status,
 					)
 
 					if detail {
 						for _, vol := range server.AttachedVolumes {
 							self.toolbox.Ok(
-								"   \\-> %s - %s",
+								"  - Volume: %s (type %s)",
 								vol.ID,
 								vol.Type,
 							)
@@ -634,54 +686,42 @@ func (self *bizflyToolboxImpl) PrintAll(detail bool) {
 			}
 
 			if len(volumes) > 0 {
-				self.toolbox.Ok("List volumes:\n")
+				self.toolbox.Ok("### List unused volumes:\n")
 
 				for _, vol := range volumes {
-					self.toolbox.Ok(
-						" + %s - %v - %v",
-						vol.ID,
-						vol.Status,
-						vol.VolumeType,
-					)
+					if vol.Status != "in-use" {
+						self.toolbox.Ok(
+							"- Volume: %s (type %s)",
+							vol.ID,
+							vol.VolumeType,
+						)
+					}
 				}
 				self.toolbox.Flush()
 			}
 
 			if detail {
 				if len(servers) > 0 {
-					self.toolbox.Ok("List servers:\n")
+					self.toolbox.Ok("### List servers:\n")
 
 					for _, server := range servers {
 						self.toolbox.Ok(
-							" + %s - %s - %s",
-							server.ID,
+							"+ %s: %s\n"+
+								"  + ID: %s",
 							server.Name,
 							server.Status,
+							server.ID,
 						)
 
 						if detail {
 							for _, vol := range server.AttachedVolumes {
 								self.toolbox.Ok(
-									"   \\-> %s - %s",
+									"  + Volume %s (type %s)",
 									vol.ID,
 									vol.Type,
 								)
 							}
 						}
-					}
-					self.toolbox.Flush()
-				}
-
-				if len(volumes) > 0 {
-					self.toolbox.Ok("List volumes:\n")
-
-					for _, vol := range volumes {
-						self.toolbox.Ok(
-							" + %s - %v - %v",
-							vol.ID,
-							vol.Status,
-							vol.VolumeType,
-						)
 					}
 					self.toolbox.Flush()
 				}
@@ -697,27 +737,28 @@ func (self *bizflyToolboxImpl) PrintAll(detail bool) {
 				}
 
 				if len(firewalls) > 0 {
-					self.toolbox.Ok("List firewalls:\n")
+					self.toolbox.Ok("### List firewalls:\n")
 
 					for _, firewall := range firewalls {
 						self.toolbox.Ok(
-							" + %s - %v",
+							"+ Firewall %s",
 							firewall.ID,
-							firewall.Tags,
 						)
 
+						self.toolbox.Ok(" - Inbound:")
 						for _, inbound := range firewall.InBound {
 							self.toolbox.Ok(
-								"   >>> %s - %s : { %s }",
+								"    + Rule %s from %s",
 								inbound.ID,
 								inbound.Tags,
 								inbound.CIDR,
 							)
 						}
 
+						self.toolbox.Ok("\n  + Outbound:")
 						for _, outbound := range firewall.InBound {
 							self.toolbox.Ok(
-								"   <<< %s - %s : { %s }",
+								"    + Rule %s to %s, port range %s",
 								outbound.ID,
 								outbound.CIDR,
 								outbound.PortRange,

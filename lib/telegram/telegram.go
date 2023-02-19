@@ -45,9 +45,9 @@ func (self *telegramImpl) ParseIncomingRequest(reader io.Reader) (*Update, error
 
 func (self *telegramImpl) ReplyMessage(chatId int64, text string) error {
 	replyObj := map[string]string{
-		"chat_id": strconv.FormatInt(chatId, 10),
-        "parse_mode": "html",
-		"text":    text,
+		"chat_id":    strconv.FormatInt(chatId, 10),
+		"text":       text,
+		"parse_mode": "MarkdownV2",
 	}
 	replyMsg, err := json.Marshal(replyObj)
 	if err != nil {
