@@ -248,7 +248,7 @@ func (self *bizflyToolboxImpl) Sync(resource, account string) {
 									pod.Name,
 									tenant.GetName(),
 									pv.Spec.CSI.VolumeHandle,
-									pv.Size(),
+									int(pv.Spec.Capacity.Storage().Value()),
 								)
 								if err != nil {
 									self.toolbox.Fail("Fail linking pod with volume: %v", err)
