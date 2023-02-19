@@ -2,7 +2,7 @@ package bizfly
 
 import (
 	"context"
-    "errors"
+	"errors"
 	"fmt"
 	"time"
 
@@ -12,6 +12,8 @@ import (
 	"github.com/hung0913208/telegram-bot-for-kubernetes/lib/db"
 	"github.com/hung0913208/telegram-bot-for-kubernetes/lib/kubernetes"
 )
+
+const SevenDaysDuration int64 = int64(7 * 24 * int(time.Hour/time.Second))
 
 type tenantImpl struct {
 	name       string
@@ -38,16 +40,16 @@ func NewTenant(
 
 	kubeconfig, err := provider.GetKubeconfig(cluster.UID)
 	if err != nil {
-        return nil, fmt.Errorf("Get kubeconfig fails: %v", err)
+		return nil, fmt.Errorf("Get kubeconfig fails: %v", err)
 	}
 
 	client, err := kubernetes.NewFromKubeconfig([]byte(kubeconfig))
 	if err != nil {
-        return nil, fmt.Errorf(
-            "New kubernetes client fails: %v (receive %d)", 
-            err, 
-            len(kubeconfig),
-        )
+		return nil, fmt.Errorf(
+			"New kubernetes client fails: %v (receive %d)",
+			err,
+			len(kubeconfig),
+		)
 	}
 
 	return &tenantImpl{
@@ -129,8 +131,16 @@ func (self *tenantImpl) GetName() string {
 	return self.name
 }
 
+func (self *tenantImpl) GetAliases() []string {
+	return self.cluster.Tags
+}
+
 func (self *tenantImpl) GetKubeconfig() ([]byte, error) {
 	return self.kubeconfig, nil
+}
+
+func (self *tenantImpl) GetExpiredTime() int64 {
+	return time.Now().Unix() + SevenDaysDuration
 }
 
 func (self *tenantImpl) GetProvider() (string, error) {

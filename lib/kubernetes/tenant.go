@@ -9,11 +9,13 @@ type Pool interface {
 
 type Tenant interface {
 	GetName() string
+	GetAliases() []string
 	GetClient() (Kubernetes, error)
 	GetMetadata() (interface{}, error)
 	GetProvider() (string, error)
 	GetKubeconfig() ([]byte, error)
 	GetPool(name string) (Pool, error)
+	GetExpiredTime() int64
 
 	SetPool(name string, pool Pool) error
 }
@@ -59,6 +61,10 @@ func (self *defaultTenantImpl) GetName() string {
 	return self.name
 }
 
+func (self *defaultTenantImpl) GetAliases() []string {
+	return make([]string, 0)
+}
+
 func (self *defaultTenantImpl) GetProvider() (string, error) {
 	return "", errors.New("Can't get provider from unknown tenant")
 }
@@ -80,6 +86,10 @@ func (self *defaultTenantImpl) GetMetadata() (interface{}, error) {
 
 func (self *defaultTenantImpl) GetPool(name string) (Pool, error) {
 	return nil, errors.New("Can't get pool from unknown tenant")
+}
+
+func (self *defaultTenantImpl) GetExpiredTime() int64 {
+	return 0
 }
 
 func (self *defaultTenantImpl) SetPool(name string, pool Pool) error {

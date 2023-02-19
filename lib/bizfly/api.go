@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	api "github.com/bizflycloud/gobizfly"
@@ -85,6 +86,7 @@ func NewApiFromDatabase(host, region string, timeout time.Duration) ([]Api, erro
 	dbConn.Migrator().CreateTable(
 		&AccountModel{},
 		&ClusterModel{},
+		&ClusterStatModel{},
 		&PoolModel{},
 		&PoolNodeModel{},
 		&ServerModel{},
@@ -394,6 +396,7 @@ func (self *apiImpl) ListCluster() ([]*api.Cluster, error) {
 			UID:             record.UUID,
 			Name:            record.Name,
 			ProvisionStatus: record.Status,
+			Tags:            strings.Split(record.Tags, ","),
 		})
 	}
 
@@ -999,6 +1002,22 @@ func (self *apiImpl) SyncPool(clusterId string) error {
 
 	poolRecords := make([]PoolModel, 0)
 
+	resp := dbConn.FirstOrCreate(
+		&ClusterStatModel{
+			Cluster: clusterId,
+			Account: self.uuid,
+			Core:    cluster.(*api.FullCluster).Stat.TotalCPU,
+			Memory:  cluster.(*api.FullCluster).Stat.TotalMemory,
+		},
+		ClusterStatModel{
+			Core:   cluster.(*api.FullCluster).Stat.TotalCPU,
+			Memory: cluster.(*api.FullCluster).Stat.TotalMemory,
+		},
+	)
+	if resp.Error != nil {
+		return resp.Error
+	}
+
 	for _, pool := range cluster.(*api.FullCluster).WorkerPools {
 		if pool.CreatedAt[len(pool.CreatedAt)-1] != 'Z' {
 			pool.CreatedAt += "Z"
@@ -1031,7 +1050,7 @@ func (self *apiImpl) SyncPool(clusterId string) error {
 		batchSize = 100
 	}
 
-	resp := dbConn.
+	resp = dbConn.
 		Clauses(clause.OnConflict{UpdateAll: true}).
 		CreateInBatches(poolRecords, batchSize)
 	return resp.Error

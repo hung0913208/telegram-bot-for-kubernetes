@@ -36,6 +36,9 @@ func NewModule() (Cluster, error) {
 
 	dbConn.Migrator().CreateTable(
 		&ClusterModel{},
+		&AliasModel{},
+		&NodeModel{},
+		&PodModel{},
 	)
 
 	return &clusterImpl{
@@ -92,6 +95,56 @@ func (self *clusterImpl) getListTenantFromDb() ([]string, error) {
 	return tenants, nil
 }
 
+func (self *clusterImpl) updateTenantToDb(tenant kubernetes.Tenant) error {
+	dbModule, err := container.Pick("elephansql")
+	if err != nil {
+		return err
+	}
+
+	dbConn, err := db.Establish(dbModule)
+	if err != nil {
+		return err
+	}
+
+	provider, err := tenant.GetProvider()
+	if err != nil {
+		return err
+	}
+
+	kubeconfig, err := tenant.GetKubeconfig()
+	if err != nil {
+		return err
+	}
+
+	metadata, err := tenant.GetMetadata()
+	if err != nil {
+		return err
+	}
+
+	encodedMetadata, err := json.Marshal(metadata)
+	if err != nil {
+		return err
+	}
+
+	encodedKubeconfig := []byte(base64.StdEncoding.EncodeToString(
+		[]byte(kubeconfig),
+	))
+
+	resp := dbConn.Clauses(clause.OnConflict{UpdateAll: true}).
+		Create(&ClusterModel{
+			Name:       tenant.GetName(),
+			Provider:   ProviderEnum(provider),
+			Metadata:   string(encodedMetadata),
+			Kubeconfig: string(encodedKubeconfig),
+			Expire:     tenant.GetExpiredTime(),
+		})
+	if resp.Error == nil {
+		self.tenants[tenant.GetName()] = tenant
+	}
+
+	return resp.Error
+}
+
 func (self *clusterImpl) loadTenantFromDb(name string) error {
 	dbModule, err := container.Pick("elephansql")
 	if err != nil {
@@ -143,20 +196,62 @@ func (self *clusterImpl) loadTenantFromDb(name string) error {
 
 		// @TODO: seem to be we must remove this one or only use when we face
 		//        outdated
-		if false {
+		if record.Expire > 0 && record.Expire < time.Now().Unix() {
 			tenant, err = record.Provider.ConvertMetadataToTenant(
 				record.Metadata,
 				self.timeout,
 			)
-		}
-		if err != nil {
-			return err
-		}
+			if err != nil {
+				return err
+			}
 
-		self.tenants[record.Name] = tenant
+			return self.updateTenantToDb(tenant)
+		} else {
+			self.tenants[record.Name] = tenant
+		}
 	}
 
 	return nil
+}
+
+func (self *clusterImpl) convertAliasToTenant(
+	alias string,
+) (kubernetes.Tenant, error) {
+	var record AliasModel
+
+	dbModule, err := container.Pick("elephansql")
+	if err != nil {
+		return nil, err
+	}
+
+	dbConn, err := db.Establish(dbModule)
+	if err != nil {
+		return nil, err
+	}
+
+	resp := dbConn.First(&record, "alias = ?", alias)
+	if resp.Error != nil {
+		return nil, resp.Error
+	}
+
+	return self.pickTenantOrLoadFromDb(record.Cluster)
+}
+
+func (self *clusterImpl) pickTenantOrLoadFromDb(
+	name string,
+) (kubernetes.Tenant, error) {
+	tenant, ok := self.tenants[name]
+	if !ok {
+		if err := self.loadTenantFromDb(name); err != nil {
+			return nil, err
+		}
+
+		if tenant, ok = self.tenants[name]; !ok {
+			return nil, fmt.Errorf("Can't find %s", name)
+		}
+	}
+
+	return tenant, nil
 }
 
 func Detach(clusterName string, module ...string) error {
@@ -207,53 +302,10 @@ func Join(tenant kubernetes.Tenant, module ...string) error {
 		return err
 	}
 
-	dbModule, err := container.Pick("elephansql")
-	if err != nil {
-		return err
-	}
-
-	dbConn, err := db.Establish(dbModule)
-	if err != nil {
-		return err
-	}
-
-	if clusterManager, ok := clusterModule.(*clusterImpl); !ok {
+	if clusterMgr, ok := clusterModule.(*clusterImpl); !ok {
 		return errors.New("Cannot get module `cluster`")
 	} else {
-		clusterManager.tenants[tenant.GetName()] = tenant
-
-		provider, err := tenant.GetProvider()
-		if err != nil {
-			return err
-		}
-
-		kubeconfig, err := tenant.GetKubeconfig()
-		if err != nil {
-			return err
-		}
-
-		metadata, err := tenant.GetMetadata()
-		if err != nil {
-			return err
-		}
-
-		encodedMetadata, err := json.Marshal(metadata)
-		if err != nil {
-			return err
-		}
-
-		encodedKubeconfig := []byte(base64.StdEncoding.EncodeToString(
-			[]byte(kubeconfig),
-		))
-
-		resp := dbConn.Clauses(clause.OnConflict{UpdateAll: true}).
-			Create(&ClusterModel{
-				Name:       tenant.GetName(),
-				Provider:   ProviderEnum(provider),
-				Metadata:   string(encodedMetadata),
-				Kubeconfig: string(encodedKubeconfig),
-			})
-		return resp.Error
+		return clusterMgr.updateTenantToDb(tenant)
 	}
 }
 
@@ -266,7 +318,10 @@ func Pick(module container.Module, name string) (kubernetes.Tenant, error) {
 	tenant, ok := clusterMgr.tenants[name]
 	if !ok {
 		if err := clusterMgr.loadTenantFromDb(name); err != nil {
-			return nil, err
+			tenant, err = clusterMgr.convertAliasToTenant(name)
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		if tenant, ok = clusterMgr.tenants[name]; !ok {

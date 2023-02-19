@@ -5,16 +5,27 @@ type ClusterModel struct {
 	Provider   ProviderEnum `json:"provider"`
 	Metadata   string       `json:"metadata"`
 	Kubeconfig string       `json:"kubeconfig"`
+	Expire     int64        `json:"expired_time"`
 }
 
 func (ClusterModel) TableName() string {
 	return "tbl_cluster_cluster"
 }
 
+type AliasModel struct {
+	Alias   string `gorm:"primaryKey" json:"name"`
+	Cluster string `gorm:"index:idx_cluster_id" json:"cluster"`
+}
+
+func (AliasModel) TableName() string {
+	return "tbl_cluster_alias"
+}
+
 type NodeModel struct {
-	Id   string `gorm:"primaryKey" json:"id"`
-	Name string `gorm:"primaryKey" json:"name"`
-	Pool string `gorm:"index:idx_pool" json:"pool_id"`
+	Id      string `gorm:"primaryKey" json:"id"`
+	Name    string `gorm:"index:idx_name" json:"name"`
+	Pool    string `gorm:"index:idx_pool" json:"pool_id"`
+	Cluster string `gorm:"index:idx_cluster_id" json:"cluster"`
 }
 
 func (NodeModel) TableName() string {
@@ -43,4 +54,18 @@ type IngressModel struct {
 
 func (IngressModel) TableName() string {
 	return "tbl_cluster_ingress"
+}
+
+type PlatformModel struct {
+}
+
+func (PlatformModel) TableName() string {
+	return "tbl_cluster_platform"
+}
+
+type AppModel struct {
+}
+
+func (AppModel) TableName() string {
+	return "tbl_cluster_app"
 }
