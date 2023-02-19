@@ -838,6 +838,7 @@ func (self *apiImpl) SyncFirewall() error {
 					CreatedAt: createdTime,
 					UpdatedAt: updatedTime,
 				},
+				Account:  self.uuid,
 				Firewall: firewall.ID,
 				CIDR:     bound.CIDR,
 				Type:     0,
@@ -1163,7 +1164,10 @@ func (self *apiImpl) LinkPodWithVolume(
 			Size:    size,
 		},
 	)
-	return resp.Error
+	if resp.Error != nil {
+		return fmt.Errorf("Fail link volume %s to pod %s: %v", volumeId, pod, resp.Error)
+	}
+	return nil
 }
 
 func (self *apiImpl) DetachCluster(clusterId string) error {
