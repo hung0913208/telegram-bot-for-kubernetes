@@ -16,7 +16,9 @@ type Kubernetes interface {
 	GetPods(namespace string) (*corev1.PodList, error)
 	GetAppPods(namespace string) (*corev1.PodList, error)
 	GetInfraPods(namespace string) (*corev1.PodList, error)
-    GetPVs() (*corev1.PersistentVolumeList, error)
+	GetPVs() (*corev1.PersistentVolumeList, error)
+	GetPodMetrics() (*PodMetricsList, error)
+	Ping() bool
 }
 
 type kubernetesImpl struct {
@@ -37,6 +39,14 @@ func NewFromKubeconfig(config []byte) (Kubernetes, error) {
 	return &kubernetesImpl{
 		client: client,
 	}, nil
+}
+
+func (self *kubernetesImpl) Ping() bool {
+	_, err := self.client.RESTClient().
+		Get().
+		AbsPath("readyz?verbose").
+		DoRaw(context.TODO())
+	return err == nil
 }
 
 func (self *kubernetesImpl) GetPods(namespace string) (*corev1.PodList, error) {

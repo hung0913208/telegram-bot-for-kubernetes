@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"strconv"
 	"time"
 
 	"gorm.io/gorm/clause"
@@ -129,8 +131,28 @@ func (self *clusterImpl) updateTenantToDb(tenant kubernetes.Tenant) error {
 	encodedKubeconfig := []byte(base64.StdEncoding.EncodeToString(
 		[]byte(kubeconfig),
 	))
+	aliasRecords := make([]AliasModel, 0)
 
-	resp := dbConn.Clauses(clause.OnConflict{UpdateAll: true}).
+	for _, alias := range tenant.GetAliases() {
+		aliasRecords = append(aliasRecords, AliasModel{
+			Alias:   alias,
+			Cluster: tenant.GetName(),
+		})
+	}
+
+	batchSize, err := strconv.Atoi(os.Getenv("GORM_BATCH_SIZE"))
+	if err != nil {
+		batchSize = 100
+	}
+
+	resp := dbConn.
+		Clauses(clause.OnConflict{UpdateAll: true}).
+		CreateInBatches(aliasRecords, batchSize)
+	if resp.Error != nil {
+		return resp.Error
+	}
+
+	resp = dbConn.Clauses(clause.OnConflict{UpdateAll: true}).
 		Create(&ClusterModel{
 			Name:       tenant.GetName(),
 			Provider:   ProviderEnum(provider),
@@ -318,14 +340,16 @@ func Pick(module container.Module, name string) (kubernetes.Tenant, error) {
 	tenant, ok := clusterMgr.tenants[name]
 	if !ok {
 		if err := clusterMgr.loadTenantFromDb(name); err != nil {
-			tenant, err = clusterMgr.convertAliasToTenant(name)
-			if err != nil {
-				return nil, err
-			}
+			return nil, err
 		}
 
 		if tenant, ok = clusterMgr.tenants[name]; !ok {
-			return nil, fmt.Errorf("Can't find %s", name)
+			tenant, err := clusterMgr.convertAliasToTenant(name)
+			if err != nil {
+				return nil, fmt.Errorf("Can't find %s: %v", name, err)
+			}
+
+			return tenant, nil
 		}
 	}
 
