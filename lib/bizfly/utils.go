@@ -1,10 +1,7 @@
 package bizfly
 
 import (
-	"context"
 	"regexp"
-
-	sentry "github.com/getsentry/sentry-go"
 )
 
 var svgRegexpCompiled *regexp.Regexp
@@ -30,12 +27,5 @@ func callBizflyApiWithMeasurement(
 	transactionName string,
 	callback func() (interface{}, error),
 ) (interface{}, error) {
-	span := sentry.StartSpan(
-		context.Background(),
-		"bizfly",
-		sentry.TransactionName(transactionName),
-	)
-	defer span.Finish()
-
 	return callback()
 }

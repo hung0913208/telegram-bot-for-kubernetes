@@ -105,7 +105,7 @@ type VolumeModel struct {
 	Type        string `json:"type"`
 	Description string `json:"description"`
 	Status      string `json:"status"`
-    Size        int    `json:"size"`
+	Size        int    `json:"size"`
 }
 
 func (VolumeModel) TableName() string {
@@ -162,4 +162,11 @@ type FirewallBoundModel struct {
 
 func (FirewallBoundModel) TableName() string {
 	return "tbl_bizfly_firewall_bound"
+}
+
+type SnapshotModel struct {
+}
+
+func (SnapshotModel) TableName() string {
+	return "tbl_bizfly_snapshot"
 }

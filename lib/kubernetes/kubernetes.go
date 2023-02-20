@@ -57,7 +57,7 @@ func (self *kubernetesImpl) GetPods(namespace string) (*corev1.PodList, error) {
 }
 
 func (self *kubernetesImpl) GetAppPods(namespace string) (*corev1.PodList, error) {
-	selector, err := labels.Parse("app.kubernetes.io/managed-by notin (Helm)")
+	selector, err := labels.Parse("pod-template-hash")
 	if err != nil {
 		return nil, err
 	}

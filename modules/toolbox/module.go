@@ -10,8 +10,6 @@ import (
 	"sync"
 	"time"
 
-	sentry "github.com/getsentry/sentry-go"
-
 	"github.com/hung0913208/telegram-bot-for-kubernetes/lib/bizfly"
 	"github.com/hung0913208/telegram-bot-for-kubernetes/lib/container"
 	"github.com/hung0913208/telegram-bot-for-kubernetes/lib/db"
@@ -206,21 +204,7 @@ func (self *toolboxImpl) GenerateSafeCallback(
 		defer self.wg.Done()
 		self.wg.Add(1)
 
-		if len(name) > 0 {
-			span := sentry.StartSpan(
-				context.Background(),
-				"toolbox",
-				sentry.TransactionName(name),
-			)
-
-			defer func() {
-				span.Finish()
-			}()
-
-			callback(cmd, args)
-		} else {
-			callback(cmd, args)
-		}
+		callback(cmd, args)
 	}
 }
 
