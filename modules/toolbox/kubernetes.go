@@ -120,7 +120,7 @@ func (self *toolboxImpl) newKubernetesGetParser() *cobra.Command {
 					return
 				}
 
-				pods, err := client.GetPods(ns)
+				pods, err := client.GetApplication(ns)
 				if err != nil {
 					self.Fail("Fail get pods: %v", err)
 				}
@@ -149,14 +149,8 @@ func (self *toolboxImpl) newKubernetesGetParser() *cobra.Command {
 
 				mapAppToPods := make(map[string][]corev1.Pod)
 
-				for _, pod := range pods.Items {
-					appName, foundApp := pod.Labels["app"]
-					_, foundHash := pod.Labels["pod-template-hash"]
-
-					if !foundApp || !foundHash || len(pod.Labels) > 2 {
-						self.Fail("found wrong app %s", appName)
-						continue
-					}
+				for _, pod := range pods {
+					appName, _ := pod.Labels["app"]
 
 					if _, existed := mapAppToPods[appName]; !existed {
 						mapAppToPods[appName] = make([]corev1.Pod, 0)
@@ -220,7 +214,7 @@ func (self *toolboxImpl) newKubernetesGetParser() *cobra.Command {
 					return
 				}
 
-				pods, err := client.GetInfraPods(ns)
+				pods, err := client.GetHelmPods(ns)
 				if err != nil {
 					self.Fail("Fail get pods: %v", err)
 				}
