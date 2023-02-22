@@ -12,19 +12,10 @@ import (
 	kubeconfig "k8s.io/client-go/tools/clientcmd"
 )
 
-//type Platform interface {
-//	GetPg(namespace string) ([]Pg, error)
-//	GetRedis(namespace string) ([]Redis, error)
-//	GetMongo(namespace string) ([]Mongo, error)
-//}
-
-type Application interface {
-	GetApplication(namespace string) ([]corev1.Pod, error)
+type Ingress interface {
 }
 
 type Kubernetes interface {
-	Application
-
 	GetPods(namespace string) (*corev1.PodList, error)
 	GetHelmPods(namespace string) (*corev1.PodList, error)
 
@@ -51,10 +42,12 @@ type Kubernetes interface {
 }
 
 type kubernetesImpl struct {
-	client *kubeapi.Clientset
+	client       *kubeapi.Clientset
+	beforeScript string
+	afterScript  string
 }
 
-func NewFromKubeconfig(config []byte) (Kubernetes, error) {
+func NewFromKubeconfig(config []byte, scripts ...[]string) (Kubernetes, error) {
 	kubeconfig, err := kubeconfig.RESTConfigFromKubeConfig(config)
 	if err != nil {
 		return nil, fmt.Errorf("fail read kubeconfig: %v", err)
@@ -65,9 +58,19 @@ func NewFromKubeconfig(config []byte) (Kubernetes, error) {
 		return nil, fmt.Errorf("fail new client: %v", err)
 	}
 
-	return &kubernetesImpl{
-		client: client,
-	}, nil
+	if len(scripts) > 0 {
+		return &kubernetesImpl{
+			client:       client,
+			beforeScript: scripts[0][0],
+			afterScript:  scripts[0][1],
+		}, nil
+	} else {
+		return &kubernetesImpl{
+			client:       client,
+			beforeScript: "",
+			afterScript:  "",
+		}, nil
+	}
 }
 
 func (self *kubernetesImpl) GetPods(namespace string) (*corev1.PodList, error) {
@@ -208,10 +211,12 @@ func (self *kubernetesImpl) renderConfigMapExecScript(
 		Data: map[string]string{
 			"exec.sh": fmt.Sprintf(
 				"#!/bin/bash\n"+
-					"\n"+
 					"%s\n"+
-					"",
+					"%s\n"+
+					"%s\n",
+				self.beforeScript,
 				script,
+				self.afterScript,
 			),
 		},
 	}

@@ -1,6 +1,7 @@
 package toolbox
 
 import (
+	"github.com/hung0913208/telegram-bot-for-kubernetes/lib/application"
 	"github.com/hung0913208/telegram-bot-for-kubernetes/lib/container"
 	"github.com/hung0913208/telegram-bot-for-kubernetes/lib/kubernetes"
 	"github.com/hung0913208/telegram-bot-for-kubernetes/modules/cluster"
@@ -120,16 +121,24 @@ func (self *toolboxImpl) newKubernetesGetParser() *cobra.Command {
 					return
 				}
 
-				pods, err := client.GetApplication(ns)
+				applicationMgr := application.NewApplicationManager(client)
+
+				pods, err := applicationMgr.GetApplication(ns)
 				if err != nil {
 					self.Fail("Fail get pods: %v", err)
+					return
 				}
 
 				metrics, err := client.GetPodMetrics()
+				if err != nil {
+					self.Fail("Fail get pods: %v", err)
+					return
+				}
 
 				pvs, err := client.GetPVs()
 				if err != nil {
 					self.Fail("Fail get pods: %v", err)
+					return
 				}
 
 				mapClaimToPV := make(map[string]corev1.PersistentVolume)
@@ -137,18 +146,17 @@ func (self *toolboxImpl) newKubernetesGetParser() *cobra.Command {
 					mapClaimToPV[pv.Spec.ClaimRef.Name] = pv
 				}
 
-				mapPodToMetric := make(map[string][]kubernetes.Container)
-
-				for _, item := range metrics.Items {
-					if len(ns) > 0 && ns != item.Metadata.Namespace {
-						continue
+				mapMetricToPod := make(map[string][]kubernetes.Usage)
+				for _, metric := range metrics.Items {
+					for _, container := range metric.Containers {
+						mapMetricToPod[metric.Metadata.Name] = append(
+							mapMetricToPod[metric.Metadata.Name],
+							container.Usage,
+						)
 					}
-
-					mapPodToMetric[item.Metadata.Name] = item.Containers
 				}
 
 				mapAppToPods := make(map[string][]corev1.Pod)
-
 				for _, pod := range pods {
 					appName, _ := pod.Labels["app"]
 
@@ -165,8 +173,15 @@ func (self *toolboxImpl) newKubernetesGetParser() *cobra.Command {
 					for _, pod := range pods {
 						self.Ok("- Pod %s:  %s", pod.ObjectMeta.Name, pod.Status.Phase)
 
-						for _, container := range pod.Spec.Containers {
+						for i, container := range pod.Spec.Containers {
 							self.Ok("    - Container %s:%s", container.Name, container.Image)
+
+							usages, ok := mapMetricToPod[pod.ObjectMeta.Name]
+							if ok {
+								self.Ok("       - CPU %s, Memory %s",
+									usages[i].CPU,
+									usages[i].Memory)
+							}
 						}
 					}
 
@@ -217,16 +232,34 @@ func (self *toolboxImpl) newKubernetesGetParser() *cobra.Command {
 				pods, err := client.GetHelmPods(ns)
 				if err != nil {
 					self.Fail("Fail get pods: %v", err)
+					return
+				}
+
+				metrics, err := client.GetPodMetrics()
+				if err != nil {
+					self.Fail("Fail get metrics: %v", err)
+					return
 				}
 
 				pvs, err := client.GetPVs()
 				if err != nil {
 					self.Fail("Fail get pods: %v", err)
+					return
 				}
 
 				mapClaimToPV := make(map[string]corev1.PersistentVolume)
 				for _, pv := range pvs.Items {
 					mapClaimToPV[pv.Spec.ClaimRef.Name] = pv
+				}
+
+				mapMetricToPod := make(map[string][]kubernetes.Usage)
+				for _, metric := range metrics.Items {
+					for _, container := range metric.Containers {
+						mapMetricToPod[metric.Metadata.Name] = append(
+							mapMetricToPod[metric.Metadata.Name],
+							container.Usage,
+						)
+					}
 				}
 
 				cnt := 0
@@ -255,8 +288,18 @@ func (self *toolboxImpl) newKubernetesGetParser() *cobra.Command {
 							}
 						}
 
+						usages, ok := mapMetricToPod[pod.ObjectMeta.Name]
+						if ok {
+							for i, usage := range usages {
+								self.Ok("  - Container #%d: CPU %s, Memory %s",
+									i+1,
+									usage.CPU,
+									usage.Memory)
+							}
+						}
+
 						cnt += 1
-						if cnt == 10 {
+						if cnt == 5 {
 							self.Flush()
 							cnt = 0
 						}
