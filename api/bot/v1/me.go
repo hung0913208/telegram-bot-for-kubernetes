@@ -36,21 +36,21 @@ var (
 )
 
 func init() {
-    timeouts := []string{"100","2","1000"}
+	timeouts := []string{"100", "2", "1000"}
 
-    if len(os.Getenv("TIMEOUT")) > 0 {
-        timeouts = strings.Split(os.Getenv("TIMEOUT"), ",")
-    }
+	if len(os.Getenv("TIMEOUT")) > 0 {
+		timeouts = strings.Split(os.Getenv("TIMEOUT"), ",")
+	}
 
-    timeoutDb, err := strconv.Atoi(timeouts[0])
-    if err != nil {
-        timeoutDb = 100
-    }
+	timeoutDb, err := strconv.Atoi(timeouts[0])
+	if err != nil {
+		timeoutDb = 100
+	}
 
-    timeoutModule, err := strconv.Atoi(timeouts[0])
-    if err != nil {
-        timeoutModule = 1000
-    }
+	timeoutModule, err := strconv.Atoi(timeouts[0])
+	if err != nil {
+		timeoutModule = 1000
+	}
 
 	outputs = make([]string, 0)
 
@@ -62,6 +62,7 @@ func init() {
 		)
 	}
 
+	// @NOTE: configure sentry
 	err = sentry.Init(sentry.ClientOptions{
 		Dsn:              os.Getenv("SENTRY_DSN"),
 		Debug:            true,
@@ -73,7 +74,34 @@ func init() {
 	}
 	defer sentry.Flush(2 * time.Second)
 
-	port, err := strconv.Atoi(os.Getenv("ELEPHANSQL_PORT"))
+	// @NOTE: configure yugabyte database
+	port, err := strconv.Atoi(os.Getenv("YUGABYTE_PORT"))
+	if err != nil {
+		container.Terminate("Can't register module `yugabyte`", ErrorRegisterSql)
+	}
+
+	yugabyte, err := db.NewPgModule(
+		os.Getenv("YUGABYTE_HOST"),
+		port,
+		os.Getenv("YUGABYTE_USERNAME"),
+		os.Getenv("YUGABYTE_PASSWORD"),
+		os.Getenv("YUGABYTE_DATABASE"),
+	)
+	if err != nil {
+		container.Terminate("Can't register module `yugabyte`", ErrorRegisterSql)
+	}
+
+	err = container.RegisterSimpleModule(
+		"yugabyte",
+		yugabyte,
+		timeoutDb,
+	)
+	if err != nil {
+		container.Terminate("Can't register module `yugabyte`", ErrorRegisterSql)
+	}
+
+	// @NOTE: configure yugabyte database
+	port, err = strconv.Atoi(os.Getenv("ELEPHANSQL_PORT"))
 	if err != nil {
 		container.Terminate("Can't register module `elephansql`", ErrorRegisterSql)
 	}
@@ -92,22 +120,23 @@ func init() {
 	err = container.RegisterSimpleModule(
 		"elephansql",
 		elephansql,
-        timeoutDb,
+		timeoutDb,
 	)
 	if err != nil {
 		container.Terminate("Can't register module `elephansql`", ErrorRegisterSql)
 	}
 
+	// @NOTE: configure cluster module
 	clusterModule, err := cluster.NewModule()
 	if err != nil {
 		container.Terminate(fmt.Sprintf("new cluster fail: %v", err), ErrorInitContainer)
 	}
 
 	err = container.RegisterSimpleModule(
-        "cluster", 
-        clusterModule, 
-        timeoutModule,
-    )
+		"cluster",
+		clusterModule,
+		timeoutModule,
+	)
 	if err != nil {
 		container.Terminate(
 			fmt.Sprintf("Can't register module `cluster`: %v", err),
@@ -118,7 +147,7 @@ func init() {
 	err = container.RegisterSimpleModule(
 		"toolbox",
 		toolbox.NewToolbox(input, &outputs),
-        timeoutModule,
+		timeoutModule,
 	)
 	if err != nil {
 		container.Terminate(fmt.Sprintf("Can't register module `toolbox`: %v", err),

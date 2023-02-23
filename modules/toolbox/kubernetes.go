@@ -177,7 +177,7 @@ func (self *toolboxImpl) newKubernetesGetParser() *cobra.Command {
 					if len(appName) == 0 || name == appName {
 						self.Ok("- App %s:", name)
 						for _, pod := range pods {
-							self.Ok("- Pod %s:  %s", pod.ObjectMeta.Name, pod.Status.Phase)
+							self.Ok("  - Pod %s:  %s", pod.ObjectMeta.Name, pod.Status.Phase)
 
 							if len(appName) > 0 {
 								for i, container := range pod.Spec.Containers {
