@@ -115,6 +115,11 @@ func (self *toolboxImpl) newKubernetesGetParser() *cobra.Command {
 					return
 				}
 
+				appName := ""
+				if len(args) > 1 {
+					appName = args[1]
+				}
+
 				client, err := tenant.GetClient()
 				if err != nil {
 					self.Fail("Get client got error: %v", err)
@@ -169,28 +174,35 @@ func (self *toolboxImpl) newKubernetesGetParser() *cobra.Command {
 
 				cnt := 0
 				for name, pods := range mapAppToPods {
-					self.Ok("- App %s:", name)
-					for _, pod := range pods {
-						self.Ok("- Pod %s:  %s", pod.ObjectMeta.Name, pod.Status.Phase)
+					if len(appName) == 0 || name == appName {
+						self.Ok("- App %s:", name)
+						for _, pod := range pods {
+							self.Ok("- Pod %s:  %s", pod.ObjectMeta.Name, pod.Status.Phase)
 
-						for i, container := range pod.Spec.Containers {
-							self.Ok("    - Container %s:%s", container.Name, container.Image)
+							if len(appName) > 0 {
+								for i, container := range pod.Spec.Containers {
+									self.Ok("    - Container %s:%s", container.Name, container.Image)
 
-							usages, ok := mapMetricToPod[pod.ObjectMeta.Name]
-							if ok {
-								self.Ok("       - CPU %s, Memory %s",
-									usages[i].CPU,
-									usages[i].Memory)
+									usages, ok := mapMetricToPod[pod.ObjectMeta.Name]
+									if ok {
+										self.Ok("       - CPU %s, Memory %s",
+											usages[i].CPU,
+											usages[i].Memory)
+									}
+
+									self.Ok("       - Image: %s", pod.Status.ContainerStatuses[i].ImageID)
+									self.Ok("       - Restart: %d", pod.Status.ContainerStatuses[i].RestartCount)
+								}
 							}
 						}
-					}
 
-					self.Ok("")
+						self.Ok("")
 
-					cnt += 1
-					if cnt == 5 {
-						self.Flush()
-						cnt = 0
+						cnt += 1
+						if cnt == 20 {
+							self.Flush()
+							cnt = 0
+						}
 					}
 				}
 			},
