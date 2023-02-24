@@ -14,6 +14,7 @@ import (
 	"github.com/hung0913208/telegram-bot-for-kubernetes/lib/container"
 	"github.com/hung0913208/telegram-bot-for-kubernetes/lib/db"
 	"github.com/hung0913208/telegram-bot-for-kubernetes/lib/kubernetes"
+	"github.com/hung0913208/telegram-bot-for-kubernetes/lib/platform"
 )
 
 type Cluster interface {
@@ -363,4 +364,24 @@ func List(module container.Module) ([]string, error) {
 	}
 
 	return clusterMgr.getListTenantFromDb()
+}
+
+func Scan(module container.Module, cluster string) error {
+	tenant, err := Pick(module, cluster)
+	if err != nil {
+		return err
+	}
+
+	client, err := tenant.GetClient()
+	if err != nil {
+		return err
+	}
+
+	pods, err := client.GetPods("")
+	if err != nil {
+		return err
+	}
+
+	_, err = platform.GetPgFromPodList(client, pods)
+	return err
 }

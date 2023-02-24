@@ -180,6 +180,11 @@ func (self *toolboxImpl) newKubernetesGetParser() *cobra.Command {
 							self.Ok("  - Pod %s:  %s", pod.ObjectMeta.Name, pod.Status.Phase)
 
 							if len(appName) > 0 {
+								self.Ok("  - List labels:")
+								for key, val := range pod.Labels {
+									self.Ok("      %s=%s", key, val)
+								}
+
 								for i, container := range pod.Spec.Containers {
 									self.Ok("    - Container %s:%s", container.Name, container.Image)
 
@@ -196,7 +201,9 @@ func (self *toolboxImpl) newKubernetesGetParser() *cobra.Command {
 							}
 						}
 
-						self.Ok("")
+						if len(appName) > 0 {
+							self.Ok("")
+						}
 
 						cnt += 1
 						if cnt == 20 {
@@ -300,6 +307,11 @@ func (self *toolboxImpl) newKubernetesGetParser() *cobra.Command {
 							}
 						}
 
+						self.Ok("  - List labels:")
+						for key, val := range pod.Labels {
+							self.Ok("      %s=%s", key, val)
+						}
+
 						usages, ok := mapMetricToPod[pod.ObjectMeta.Name]
 						if ok {
 							for i, usage := range usages {
@@ -321,7 +333,7 @@ func (self *toolboxImpl) newKubernetesGetParser() *cobra.Command {
 		),
 	}
 	getInfraPodsCmd.PersistentFlags().
-		String("namespace", "default", "The k8s namespace we would like to access")
+		String("namespace", "", "The k8s namespace we would like to access")
 
 	root.AddCommand(getClustersCmd)
 	root.AddCommand(getAppPodsCmd)
