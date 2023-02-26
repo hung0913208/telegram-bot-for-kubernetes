@@ -62,6 +62,44 @@ func (self *clusterImpl) Execute(args []string) error {
 	return errors.New("Don't support using as interactive module")
 }
 
+func (self *clusterImpl) getListAliasesFromDb(tenant string) ([]string, error) {
+	dbModule, err := container.Pick("elephansql")
+	if err != nil {
+		return nil, err
+	}
+
+	dbConn, err := db.Establish(dbModule)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := dbConn.Model(&AliasModel{}).
+		Where("cluster = ?", tenant).
+		Rows()
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	aliases := make([]string, 0)
+	for rows.Next() {
+		var record AliasModel
+
+		err = dbConn.ScanRows(rows, &record)
+		if err != nil {
+			return nil, err
+		}
+
+		if len(record.Alias) == 0 {
+			break
+		}
+
+		aliases = append(aliases, record.Alias)
+	}
+
+	return aliases, nil
+}
+
 func (self *clusterImpl) getListTenantFromDb() ([]string, error) {
 	dbModule, err := container.Pick("elephansql")
 	if err != nil {
@@ -363,7 +401,22 @@ func List(module container.Module) ([]string, error) {
 		return nil, errors.New("Unknown module")
 	}
 
-	return clusterMgr.getListTenantFromDb()
+	mapping := make(map[string]string)
+
+	tenants, err := clusterMgr.getListTenantFromDb()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, tenant := range tenants {
+		aliases, err := clusterMgr.getListAliasesFromDb(tenant)
+		if err != nil {
+			return err
+		}
+		mapping[tenant] = aliases
+	}
+
+	return mapping, nil
 }
 
 func Scan(module container.Module, cluster string) error {

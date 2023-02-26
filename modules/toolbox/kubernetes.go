@@ -86,7 +86,12 @@ func (self *toolboxImpl) newKubernetesGetParser() *cobra.Command {
 					return
 				}
 
-				self.Ok("%v", clusters)
+				for cluster, aliases := range clusters {
+					self.Ok("- Cluster: %s", cluster)
+					for _, alias := range aliases {
+						self.Ok("  - Alias: %s", alias)
+					}
+				}
 			},
 		),
 	}

@@ -7,7 +7,7 @@ import (
 )
 
 type Backup interface {
-	Perform() error
+	Backup() error
 }
 
 type backupImpl struct {
@@ -26,6 +26,6 @@ func NewBackup(
 	}
 }
 
-func (self *backupImpl) Perform() error {
+func (self *backupImpl) Backup() error {
 	return nil
 }

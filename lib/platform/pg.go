@@ -37,7 +37,7 @@ func GetPgFromPodList(
 			continue
 		}
 
-		instance, err := newPg(client, pod)
+		instance, err := NewPg(client, pod)
 		if err != nil {
 			return nil, err
 		}
@@ -48,9 +48,13 @@ func GetPgFromPodList(
 	return ret, nil
 }
 
-func newPg(client kubernetes.Kubernetes, pod corev1.Pod) (Pg, error) {
-	return pgImpl{
+func NewPg(client kubernetes.Kubernetes, pod corev1.Pod) (Pg, error) {
+	return &pgImpl{
 		client: client,
 		pod:    pod,
 	}, nil
+}
+
+func (self *pgImpl) Backup() error {
+	return nil
 }
