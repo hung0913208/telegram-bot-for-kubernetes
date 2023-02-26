@@ -281,6 +281,11 @@ func (self *toolboxImpl) newKubernetesGetParser() *cobra.Command {
 					}
 				}
 
+				appName := ""
+				if len(args) > 1 {
+					appName = args[1]
+				}
+
 				cnt := 0
 				for _, pod := range pods.Items {
 					ok := false
@@ -290,6 +295,12 @@ func (self *toolboxImpl) newKubernetesGetParser() *cobra.Command {
 							ok = true
 							break
 						}
+					}
+
+					if len(appName) > 0 &&
+						appName != pod.Labels["app.kubernetes.io/name"] &&
+						appName != pod.Labels["app.kubernetes.io/instance"] {
+						continue
 					}
 
 					if ok {
@@ -315,15 +326,21 @@ func (self *toolboxImpl) newKubernetesGetParser() *cobra.Command {
 						usages, ok := mapMetricToPod[pod.ObjectMeta.Name]
 						if ok {
 							for i, usage := range usages {
-								self.Ok("  - Container #%d: CPU %s, Memory %s",
-									i+1,
-									usage.CPU,
-									usage.Memory)
+								self.Ok("    - Container %s:%s",
+									pod.Spec.Containers[i].Name,
+									pod.Spec.Containers[i].Image,
+								)
+								self.Ok("      - CPU %s", usage.CPU)
+								self.Ok("      - Memory %s", usage.Memory)
+								self.Ok("      - Image: %s",
+									pod.Status.ContainerStatuses[i].ImageID)
+								self.Ok("      - Restart: %d",
+									pod.Status.ContainerStatuses[i].RestartCount)
 							}
 						}
 
 						cnt += 1
-						if cnt == 5 {
+						if cnt == 1 {
 							self.Flush()
 							cnt = 0
 						}
