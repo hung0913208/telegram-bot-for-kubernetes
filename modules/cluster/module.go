@@ -40,8 +40,6 @@ func NewModule() (Cluster, error) {
 	dbConn.Migrator().CreateTable(
 		&ClusterModel{},
 		&AliasModel{},
-		&NodeModel{},
-		&PodModel{},
 	)
 
 	return &clusterImpl{
@@ -395,13 +393,13 @@ func Pick(module container.Module, name string) (kubernetes.Tenant, error) {
 	return tenant, nil
 }
 
-func List(module container.Module) ([]string, error) {
+func List(module container.Module) (map[string][]string, error) {
 	clusterMgr, ok := module.(*clusterImpl)
 	if !ok {
 		return nil, errors.New("Unknown module")
 	}
 
-	mapping := make(map[string]string)
+	mapping := make(map[string][]string)
 
 	tenants, err := clusterMgr.getListTenantFromDb()
 	if err != nil {
@@ -411,7 +409,7 @@ func List(module container.Module) ([]string, error) {
 	for _, tenant := range tenants {
 		aliases, err := clusterMgr.getListAliasesFromDb(tenant)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		mapping[tenant] = aliases
 	}
@@ -436,5 +434,8 @@ func Scan(module container.Module, cluster string) error {
 	}
 
 	_, err = platform.GetPgFromPodList(client, pods)
-	return err
+	if err != nil {
+		return err
+	}
+	return nil
 }

@@ -28,13 +28,13 @@ type Kubernetes interface {
 	Ping() bool
 	Cron(
 		name string,
-		cmd []string,
+		script string,
 		image string,
 		schedule, namespace string,
 	) error
 	Do(
 		name string,
-		cmd []string,
+		script string,
 		image string,
 		namespace string,
 		backOffLimit int32,
@@ -110,7 +110,7 @@ func (self *kubernetesImpl) Ping() bool {
 
 func (self *kubernetesImpl) Cron(
 	name string,
-	cmd []string,
+	script string,
 	image string,
 	schedule, namespace string,
 ) error {
@@ -129,7 +129,25 @@ func (self *kubernetesImpl) Cron(
 								{
 									Name:    name,
 									Image:   image,
-									Command: cmd,
+									Command: []string{"/bin/bash", "-c", "/data/exec.sh"},
+									VolumeMounts: []corev1.VolumeMount{
+										{
+											Name:      "data",
+											MountPath: "/data",
+										},
+									},
+								},
+							},
+							Volumes: []corev1.Volume{
+								{
+									Name: "data",
+									VolumeSource: corev1.VolumeSource{
+										ConfigMap: &corev1.ConfigMapVolumeSource{
+											LocalObjectReference: corev1.LocalObjectReference{
+												Name: fmt.Sprintf("%s-data-cm", name),
+											},
+										},
+									},
 								},
 							},
 							RestartPolicy: corev1.RestartPolicyNever,
@@ -142,7 +160,16 @@ func (self *kubernetesImpl) Cron(
 		},
 	}
 
-	_, err := cronjobs.Create(
+	err := self.renderConfigMapExecScript(
+		fmt.Sprintf("%s-data-cm", name),
+		namespace,
+		script,
+	)
+	if err != nil {
+		return err
+	}
+
+	_, err = cronjobs.Create(
 		context.TODO(),
 		spec,
 		metav1.CreateOptions{},
@@ -156,7 +183,7 @@ func (self *kubernetesImpl) Cron(
 
 func (self *kubernetesImpl) Do(
 	name string,
-	cmd []string,
+	script string,
 	image string,
 	namespace string,
 	backOffLimit int32,
@@ -174,7 +201,25 @@ func (self *kubernetesImpl) Do(
 						{
 							Name:    name,
 							Image:   image,
-							Command: cmd,
+							Command: []string{"/bin/bash", "-c", "/data/exec.sh"},
+							VolumeMounts: []corev1.VolumeMount{
+								{
+									Name:      "data",
+									MountPath: "/data",
+								},
+							},
+						},
+					},
+					Volumes: []corev1.Volume{
+						{
+							Name: "data",
+							VolumeSource: corev1.VolumeSource{
+								ConfigMap: &corev1.ConfigMapVolumeSource{
+									LocalObjectReference: corev1.LocalObjectReference{
+										Name: fmt.Sprintf("%s-data-cm", name),
+									},
+								},
+							},
 						},
 					},
 					RestartPolicy: corev1.RestartPolicyNever,
@@ -184,7 +229,16 @@ func (self *kubernetesImpl) Do(
 		},
 	}
 
-	_, err := jobs.Create(
+	err := self.renderConfigMapExecScript(
+		fmt.Sprintf("%s-data-cm", name),
+		namespace,
+		script,
+	)
+	if err != nil {
+		return err
+	}
+
+	_, err = jobs.Create(
 		context.TODO(),
 		spec,
 		metav1.CreateOptions{},

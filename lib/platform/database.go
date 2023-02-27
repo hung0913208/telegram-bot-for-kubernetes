@@ -1,6 +1,7 @@
 package platform
 
 type Pg interface {
+    Maintenance
 	Backup
 }
 

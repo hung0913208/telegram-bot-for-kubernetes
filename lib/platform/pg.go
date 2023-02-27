@@ -55,6 +55,18 @@ func NewPg(client kubernetes.Kubernetes, pod corev1.Pod) (Pg, error) {
 	}, nil
 }
 
-func (self *pgImpl) Backup() error {
+func (self *pgImpl) Backup(interval ...string) error {
+	return nil
+}
+
+func (self *pgImpl) Expand(percent int) error {
+	return nil
+}
+
+func (self *pgImpl) Unlock() error {
+	return nil
+}
+
+func (self *pgImpl) Lock() error {
 	return nil
 }
