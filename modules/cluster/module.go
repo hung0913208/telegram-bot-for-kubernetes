@@ -231,8 +231,8 @@ func (self *clusterImpl) loadTenantFromDb(name string) error {
 			return err
 		}
 
-		if len(record.Name) == 0 {
-			break
+		if len(name) > 0 && name != record.Name {
+			continue
 		}
 
 		kubeconfig, err := base64.StdEncoding.DecodeString(record.Kubeconfig)
