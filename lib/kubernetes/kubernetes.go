@@ -16,6 +16,7 @@ type Ingress interface {
 }
 
 type Kubernetes interface {
+	GetClient() *kubeapi.Clientset
 	GetPods(namespace string) (*corev1.PodList, error)
 	GetHelmPods(namespace string) (*corev1.PodList, error)
 
@@ -28,26 +29,33 @@ type Kubernetes interface {
 	Ping() bool
 	Cron(
 		name string,
-		script string,
-		image string,
+		command string,
 		schedule, namespace string,
 	) error
 	Do(
 		name string,
-		script string,
-		image string,
+		command string,
 		namespace string,
 		backOffLimit int32,
 	) error
 }
 
-type kubernetesImpl struct {
-	client       *kubeapi.Clientset
-	beforeScript string
-	afterScript  string
+type Hook struct {
+	Header     string
+	Exec       []string
+	Name       string
+	Image      string
+	MountPoint string
+	PreHook    string
+	PostHook   string
 }
 
-func NewFromKubeconfig(config []byte, scripts ...[]string) (Kubernetes, error) {
+type kubernetesImpl struct {
+	client *kubeapi.Clientset
+	hook   Hook
+}
+
+func NewFromKubeconfig(config []byte, hook ...Hook) (Kubernetes, error) {
 	kubeconfig, err := kubeconfig.RESTConfigFromKubeConfig(config)
 	if err != nil {
 		return nil, fmt.Errorf("fail read kubeconfig: %v", err)
@@ -58,19 +66,43 @@ func NewFromKubeconfig(config []byte, scripts ...[]string) (Kubernetes, error) {
 		return nil, fmt.Errorf("fail new client: %v", err)
 	}
 
-	if len(scripts) > 0 {
+	if len(hook) > 0 {
 		return &kubernetesImpl{
-			client:       client,
-			beforeScript: scripts[0][0],
-			afterScript:  scripts[0][1],
+			client: client,
+			hook:   hook[0],
 		}, nil
 	} else {
 		return &kubernetesImpl{
-			client:       client,
-			beforeScript: "",
-			afterScript:  "",
+			client: client,
+			hook: Hook{
+				Name:       "exec",
+				Exec:       []string{"/bin/bash", "-c", "/data/exec"},
+				MountPoint: "/data",
+			},
 		}, nil
 	}
+}
+
+func NewFromClient(client Kubernetes, hook ...Hook) Kubernetes {
+	if len(hook) > 0 {
+		return &kubernetesImpl{
+			client: client.GetClient(),
+			hook:   hook[0],
+		}
+	} else {
+		return &kubernetesImpl{
+			client: client.GetClient(),
+			hook: Hook{
+				Name:       "exec",
+				Exec:       []string{"/bin/bash", "-c", "/data/exec"},
+				MountPoint: "/data",
+			},
+		}
+	}
+}
+
+func (self *kubernetesImpl) GetClient() *kubeapi.Clientset {
+	return self.client
 }
 
 func (self *kubernetesImpl) GetPods(namespace string) (*corev1.PodList, error) {
@@ -110,8 +142,7 @@ func (self *kubernetesImpl) Ping() bool {
 
 func (self *kubernetesImpl) Cron(
 	name string,
-	script string,
-	image string,
+	command string,
 	schedule, namespace string,
 ) error {
 	cronjobs := self.client.BatchV1().CronJobs(namespace)
@@ -128,23 +159,23 @@ func (self *kubernetesImpl) Cron(
 							Containers: []corev1.Container{
 								{
 									Name:    name,
-									Image:   image,
-									Command: []string{"/bin/bash", "-c", "/data/exec.sh"},
+									Image:   self.hook.Image,
+									Command: self.hook.Exec,
 									VolumeMounts: []corev1.VolumeMount{
 										{
-											Name:      "data",
-											MountPath: "/data",
+											Name:      self.hook.Name,
+											MountPath: self.hook.MountPoint,
 										},
 									},
 								},
 							},
 							Volumes: []corev1.Volume{
 								{
-									Name: "data",
+									Name: self.hook.Name,
 									VolumeSource: corev1.VolumeSource{
 										ConfigMap: &corev1.ConfigMapVolumeSource{
 											LocalObjectReference: corev1.LocalObjectReference{
-												Name: fmt.Sprintf("%s-data-cm", name),
+												Name: fmt.Sprintf("%s-%s-cm", name, self.hook.Name),
 											},
 										},
 									},
@@ -160,10 +191,10 @@ func (self *kubernetesImpl) Cron(
 		},
 	}
 
-	err := self.renderConfigMapExecScript(
-		fmt.Sprintf("%s-data-cm", name),
+	err := self.renderConfigMapExecHook(
+		fmt.Sprintf("%s-%s-cm", name, self.hook.Name),
 		namespace,
-		script,
+		command,
 	)
 	if err != nil {
 		return err
@@ -183,8 +214,7 @@ func (self *kubernetesImpl) Cron(
 
 func (self *kubernetesImpl) Do(
 	name string,
-	script string,
-	image string,
+	command string,
 	namespace string,
 	backOffLimit int32,
 ) error {
@@ -200,23 +230,23 @@ func (self *kubernetesImpl) Do(
 					Containers: []corev1.Container{
 						{
 							Name:    name,
-							Image:   image,
-							Command: []string{"/bin/bash", "-c", "/data/exec.sh"},
+							Image:   self.hook.Image,
+							Command: self.hook.Exec,
 							VolumeMounts: []corev1.VolumeMount{
 								{
-									Name:      "data",
-									MountPath: "/data",
+									Name:      self.hook.Name,
+									MountPath: self.hook.MountPoint,
 								},
 							},
 						},
 					},
 					Volumes: []corev1.Volume{
 						{
-							Name: "data",
+							Name: self.hook.Name,
 							VolumeSource: corev1.VolumeSource{
 								ConfigMap: &corev1.ConfigMapVolumeSource{
 									LocalObjectReference: corev1.LocalObjectReference{
-										Name: fmt.Sprintf("%s-data-cm", name),
+										Name: fmt.Sprintf("%s-%s-cm", name, self.hook.Name),
 									},
 								},
 							},
@@ -229,10 +259,10 @@ func (self *kubernetesImpl) Do(
 		},
 	}
 
-	err := self.renderConfigMapExecScript(
-		fmt.Sprintf("%s-data-cm", name),
+	err := self.renderConfigMapExecHook(
+		fmt.Sprintf("%s-%s-cm", name, self.hook.Name),
 		namespace,
-		script,
+		command,
 	)
 	if err != nil {
 		return err
@@ -250,10 +280,10 @@ func (self *kubernetesImpl) Do(
 	return nil
 }
 
-func (self *kubernetesImpl) renderConfigMapExecScript(
+func (self *kubernetesImpl) renderConfigMapExecHook(
 	name string,
 	namespace string,
-	script string,
+	command string,
 ) error {
 	configmaps := self.client.CoreV1().
 		ConfigMaps(namespace)
@@ -263,14 +293,12 @@ func (self *kubernetesImpl) renderConfigMapExecScript(
 			Namespace: namespace,
 		},
 		Data: map[string]string{
-			"exec.sh": fmt.Sprintf(
-				"#!/bin/bash\n"+
-					"%s\n"+
-					"%s\n"+
-					"%s\n",
-				self.beforeScript,
-				script,
-				self.afterScript,
+			self.hook.Name: fmt.Sprintf(
+				"%s\n%s\n%s\n%s\n",
+				self.hook.Header,
+				self.hook.PreHook,
+				command,
+				self.hook.PostHook,
 			),
 		},
 	}

@@ -1,17 +1,11 @@
 package bizfly
 
 import (
-	"time"
+	"github.com/hung0913208/telegram-bot-for-kubernetes/lib/platform"
 )
 
-type BaseModel struct {
-	UUID      string    `gorm:"primaryKey" json:"uuid"`
-	CreatedAt time.Time `gorm:"autoCreateTime" json:"create_at"`
-	UpdatedAt time.Time `gorm:"autoUpdateTime" json:"update_at"`
-}
-
 type AccountModel struct {
-	BaseModel
+	platform.BaseModel
 
 	Email     string `gorm:"index:tbl_bizfly_account_idx_email" json:"email"`
 	Password  string `json:"password"`
@@ -23,7 +17,7 @@ func (AccountModel) TableName() string {
 }
 
 type ClusterModel struct {
-	BaseModel
+	platform.BaseModel
 
 	Account string `gorm:"index:idx_bizfly_cluster_account_id" json:"account"`
 	Name    string `gorm:"index:tbl_bizfly_cluster_idx_name" json:"name"`
@@ -49,7 +43,7 @@ func (ClusterStatModel) TableName() string {
 }
 
 type PoolModel struct {
-	BaseModel
+	platform.BaseModel
 
 	Name              string `gorm:"index:tbl_bizfly_pool_idx_name" json:"name"`
 	Account           string `gorm:"index:idx_bizfly_pool_account_id" json:"account"`
@@ -67,7 +61,7 @@ func (PoolModel) TableName() string {
 }
 
 type PoolNodeModel struct {
-	BaseModel
+	platform.BaseModel
 
 	Name    string `json:"name"`
 	Account string `gorm:"index:tbl_bizfly_pool_node_idx_account_id" json:"account"`
@@ -83,7 +77,7 @@ func (PoolNodeModel) TableName() string {
 }
 
 type ServerModel struct {
-	BaseModel
+	platform.BaseModel
 
 	Account string `gorm:"index:tbl_bizfly_server_idx_account_id" json:"account"`
 	Status  string `gorm:"index:tbl_bizfly_server_idx_status" json:"status"`
@@ -98,7 +92,7 @@ func (ServerModel) TableName() string {
 }
 
 type VolumeModel struct {
-	BaseModel
+	platform.BaseModel
 
 	Account     string `gorm:"index:tbl_bizfly_volume_idx_account_id" json:"account"`
 	Zone        string `gorm:"index:tbl_bizfly_volume_idx_zone" json:"zone"`
@@ -135,7 +129,7 @@ func (VolumeClusterModel) TableName() string {
 }
 
 type FirewallModel struct {
-	BaseModel
+	platform.BaseModel
 
 	Account string `gorm:"index:tbl_bizfly_firewall_idx_account_id" json:"account"`
 }
@@ -152,7 +146,7 @@ const (
 )
 
 type FirewallBoundModel struct {
-	BaseModel
+	platform.BaseModel
 
 	Account  string            `gorm:"index:tbl_bizfly_firewall_bound_idx_account_id" json:"account"`
 	Firewall string            `gorm:"index:tbl_bizfly_firewall_bound_idx_firewall_id" json:"firewall"`

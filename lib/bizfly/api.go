@@ -16,6 +16,7 @@ import (
 
 	"github.com/hung0913208/telegram-bot-for-kubernetes/lib/container"
 	"github.com/hung0913208/telegram-bot-for-kubernetes/lib/db"
+	"github.com/hung0913208/telegram-bot-for-kubernetes/lib/platform"
 )
 
 type Api interface {
@@ -262,7 +263,7 @@ func (self *apiImpl) SetToken() error {
 
 		result := self.dbConn.FirstOrCreate(
 			&AccountModel{
-				BaseModel: BaseModel{
+				BaseModel: platform.BaseModel{
 					UUID: self.uuid,
 				},
 				Email:     self.username,
@@ -270,7 +271,7 @@ func (self *apiImpl) SetToken() error {
 				ProjectId: projectId,
 			},
 			AccountModel{
-				BaseModel: BaseModel{
+				BaseModel: platform.BaseModel{
 					UUID: self.uuid,
 				},
 			},
@@ -650,7 +651,7 @@ func (self *apiImpl) SyncCluster() error {
 
 	for _, cluster := range clusters.([]*api.Cluster) {
 		clusterRecords = append(clusterRecords, ClusterModel{
-			BaseModel: BaseModel{
+			BaseModel: platform.BaseModel{
 				UUID: cluster.UID,
 			},
 			Account: self.uuid,
@@ -722,7 +723,7 @@ func (self *apiImpl) SyncServer() error {
 		}
 
 		serverRecords = append(serverRecords, ServerModel{
-			BaseModel: BaseModel{
+			BaseModel: platform.BaseModel{
 				UUID:      server.ID,
 				CreatedAt: createdTime,
 				UpdatedAt: updatedTime,
@@ -806,7 +807,7 @@ func (self *apiImpl) SyncFirewall() error {
 		}
 
 		firewallRecords = append(firewallRecords, FirewallModel{
-			BaseModel: BaseModel{
+			BaseModel: platform.BaseModel{
 				UUID:      firewall.ID,
 				CreatedAt: createdTime,
 				UpdatedAt: updatedTime,
@@ -834,7 +835,7 @@ func (self *apiImpl) SyncFirewall() error {
 			}
 
 			firewallBoundRecords = append(firewallBoundRecords, FirewallBoundModel{
-				BaseModel: BaseModel{
+				BaseModel: platform.BaseModel{
 					UUID:      bound.ID,
 					CreatedAt: createdTime,
 					UpdatedAt: updatedTime,
@@ -866,7 +867,7 @@ func (self *apiImpl) SyncFirewall() error {
 			}
 
 			firewallBoundRecords = append(firewallBoundRecords, FirewallBoundModel{
-				BaseModel: BaseModel{
+				BaseModel: platform.BaseModel{
 					UUID:      bound.ID,
 					CreatedAt: createdTime,
 					UpdatedAt: updatedTime,
@@ -949,7 +950,7 @@ func (self *apiImpl) SyncVolume() error {
 		}
 
 		volumeRecords = append(volumeRecords, VolumeModel{
-			BaseModel: BaseModel{
+			BaseModel: platform.BaseModel{
 				UUID:      volume.ID,
 				CreatedAt: createdTime,
 				UpdatedAt: updatedTime,
@@ -1032,7 +1033,7 @@ func (self *apiImpl) SyncPool(clusterId string) error {
 		}
 
 		poolRecords = append(poolRecords, PoolModel{
-			BaseModel: BaseModel{
+			BaseModel: platform.BaseModel{
 				UUID:      pool.UID,
 				CreatedAt: createdTime,
 			},
@@ -1090,7 +1091,7 @@ func (self *apiImpl) SyncPoolNode(clusterId, poolId string) error {
 
 	for _, node := range nodes.(*api.WorkerPoolWithNodes).Nodes {
 		nodeRecords = append(nodeRecords, PoolNodeModel{
-			BaseModel: BaseModel{
+			BaseModel: platform.BaseModel{
 				UUID: node.ID,
 			},
 			Name:    node.Name,
@@ -1202,7 +1203,7 @@ func (self *apiImpl) DetachCluster(clusterId string) error {
 	}
 
 	resp = dbConn.Delete(&ClusterModel{
-		BaseModel: BaseModel{
+		BaseModel: platform.BaseModel{
 			UUID: clusterId,
 		},
 	})
@@ -1259,7 +1260,7 @@ func (self *apiImpl) DetachServer(serverId string) error {
 	}
 
 	resp := dbConn.Delete(&ServerModel{
-		BaseModel: BaseModel{
+		BaseModel: platform.BaseModel{
 			UUID: serverId,
 		},
 	})

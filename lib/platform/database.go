@@ -1,8 +1,7 @@
 package platform
 
 type Pg interface {
-    Maintenance
-	Backup
+	Maintenance
 }
 
 type Mongo interface {

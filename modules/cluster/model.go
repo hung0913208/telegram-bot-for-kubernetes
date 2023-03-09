@@ -1,12 +1,12 @@
 package cluster
 
 type ClusterModel struct {
-	Name          string       `gorm:"primaryKey" json:"name"`
-	Provider      ProviderEnum `json:"provider"`
-	Metadata      string       `json:"metadata"`
-	Kubeconfig    string       `json:"kubeconfig"`
-	Expire        int64        `json:"expired_time"`
-	Infrascruture string       `json:"infrastructure"`
+	Name           string       `gorm:"primaryKey" json:"name"`
+	Provider       ProviderEnum `json:"provider"`
+	Metadata       string       `json:"metadata"`
+	Kubeconfig     string       `json:"kubeconfig"`
+	Expire         int64        `json:"expired_time"`
+	Infrastructure string       `json:"infrastructure"`
 }
 
 func (ClusterModel) TableName() string {
@@ -21,4 +21,3 @@ type AliasModel struct {
 func (AliasModel) TableName() string {
 	return "tbl_cluster_alias"
 }
-
