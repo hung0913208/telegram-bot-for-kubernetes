@@ -31,12 +31,14 @@ type Kubernetes interface {
 		name string,
 		command string,
 		schedule, namespace string,
+		extendVolumes ...map[string]corev1.PersistentVolumeClaim,
 	) error
 	Do(
 		name string,
 		command string,
 		namespace string,
 		backOffLimit int32,
+		extendVolumes ...map[string]corev1.PersistentVolumeClaim,
 	) error
 }
 
@@ -144,8 +146,39 @@ func (self *kubernetesImpl) Cron(
 	name string,
 	command string,
 	schedule, namespace string,
+	extendVolumes ...map[string]corev1.PersistentVolumeClaim,
 ) error {
 	cronjobs := self.client.BatchV1().CronJobs(namespace)
+	volumes := make([]corev1.Volume, 0)
+
+	if len(extendVolumes) > 0 {
+		for _, pvc := range extendVolumes[0] {
+			volumes = append(volumes,
+				corev1.Volume{
+					Name: pvc.Name,
+					VolumeSource: corev1.VolumeSource{
+						PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+							ClaimName: pvc.Name,
+						},
+					},
+				},
+			)
+		}
+	}
+
+	volumes = append(volumes,
+		corev1.Volume{
+			Name: self.hook.Name,
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: fmt.Sprintf("%s-%s-cm", name, self.hook.Name),
+					},
+				},
+			},
+		},
+	)
+
 	spec := &batchv1.CronJob{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
@@ -169,18 +202,7 @@ func (self *kubernetesImpl) Cron(
 									},
 								},
 							},
-							Volumes: []corev1.Volume{
-								{
-									Name: self.hook.Name,
-									VolumeSource: corev1.VolumeSource{
-										ConfigMap: &corev1.ConfigMapVolumeSource{
-											LocalObjectReference: corev1.LocalObjectReference{
-												Name: fmt.Sprintf("%s-%s-cm", name, self.hook.Name),
-											},
-										},
-									},
-								},
-							},
+							Volumes:       volumes,
 							RestartPolicy: corev1.RestartPolicyNever,
 						},
 					},
@@ -217,7 +239,38 @@ func (self *kubernetesImpl) Do(
 	command string,
 	namespace string,
 	backOffLimit int32,
+	extendVolumes ...map[string]corev1.PersistentVolumeClaim,
 ) error {
+	volumes := make([]corev1.Volume, 0)
+
+	if len(extendVolumes) > 0 {
+		for _, pvc := range extendVolumes[0] {
+			volumes = append(volumes,
+				corev1.Volume{
+					Name: pvc.Name,
+					VolumeSource: corev1.VolumeSource{
+						PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+							ClaimName: pvc.Name,
+						},
+					},
+				},
+			)
+		}
+	}
+
+	volumes = append(volumes,
+		corev1.Volume{
+			Name: self.hook.Name,
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: fmt.Sprintf("%s-%s-cm", name, self.hook.Name),
+					},
+				},
+			},
+		},
+	)
+
 	jobs := self.client.BatchV1().Jobs(namespace)
 	spec := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
@@ -240,18 +293,7 @@ func (self *kubernetesImpl) Do(
 							},
 						},
 					},
-					Volumes: []corev1.Volume{
-						{
-							Name: self.hook.Name,
-							VolumeSource: corev1.VolumeSource{
-								ConfigMap: &corev1.ConfigMapVolumeSource{
-									LocalObjectReference: corev1.LocalObjectReference{
-										Name: fmt.Sprintf("%s-%s-cm", name, self.hook.Name),
-									},
-								},
-							},
-						},
-					},
+					Volumes:       volumes,
 					RestartPolicy: corev1.RestartPolicyNever,
 				},
 			},
