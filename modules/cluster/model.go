@@ -23,7 +23,7 @@ func (ClusterModel) TableName() string {
 
 type AliasModel struct {
 	Alias   string `gorm:"primaryKey" json:"name"`
-	Cluster string `gorm:"index:idx_cluster_id" json:"cluster"`
+	Cluster string `gorm:"index:idx_cluster_alias_cluster" json:"cluster"`
 }
 
 func (AliasModel) TableName() string {
@@ -31,8 +31,9 @@ func (AliasModel) TableName() string {
 }
 
 type DeploymentModel struct {
-	Name string `gorm:"primaryKey" json:"name"`
-	Kind string `gorm:"index:idx_kind" json:"kind"`
+	Name    string `gorm:"primaryKey" json:"name"`
+	Cluster string `gorm:"primaryKey,index:idx_cluster_deployment_cluster" json:"cluster"`
+	Kind    string `gorm:"index:idx_cluster_deployment_kind" json:"kind"`
 }
 
 func (DeploymentModel) TableName() string {
@@ -40,15 +41,15 @@ func (DeploymentModel) TableName() string {
 }
 
 type PodModel struct {
-	Id            int       `gorm:"primaryKey,autoIncrement" json:"id"`
-	Index         int       `gorm:"index:idx_pod_index" json:"index"`
-	Deployment    string    `gorm:"index:idx_deployment" json:"deployment"`
-	CpuLimit      int       `json:"cpu_limit"`
-	MemoryLimit   int       `json:"memory_limit"`
-	CpuRequest    int       `json:"cpu_request"`
-	MemoryRequest int       `json:"memory_request"`
-	CreatedAt     time.Time `gorm:"autoCreateTime" json:"create_at"`
-	UpdatedAt     time.Time `gorm:"autoUpdateTime" json:"update_at"`
+	platform.BaseModel
+
+	Deployment    string `gorm:"index:idx_cluster_pod_deployment" json:"deployment"`
+	Status        int    `gorm:"index:idx_cluster_pod_status" json:"status"`
+	Version       string `json:"version"`
+	CpuLimit      int    `gorm:"index:idx_cluster_pod_cpu_limit" json:"cpu_limit"`
+	MemoryLimit   int    `gorm:"index:idx_cluster_pod_memory_limit" json:"memory_limit"`
+	CpuRequest    int    `gorm:"index:idx_cluster_pod_cpu_request" json:"cpu_request"`
+	MemoryRequest int    `gorm:"index:idx_cluster_pod_memory_request" json:"memory_request"`
 }
 
 func (PodModel) TableName() string {
@@ -58,9 +59,10 @@ func (PodModel) TableName() string {
 type VolumeModel struct {
 	platform.BaseModel
 
-	Pod      int    `gorm:"index:idx_pod" json:"pod"`
-	Name     string `gorm:"index:idx_name" json:"name"`
-	Usage    int    `json:"usage"`
+	Name     string `json:"name"`
+	Pod      string `gorm:"index:idx_cluster_volume_pod" json:"pod"`
+	Cluster  string `gorm:"index:idx_cluster_volume_cluster" json:"cluster"`
+	Usage    int    `gorm:"index:idx_cluster_volume_usage" json:"usage"`
 	Capacity int    `json:"capacity"`
 }
 
@@ -71,7 +73,8 @@ func (VolumeModel) TableName() string {
 type VolumeSnapshotModel struct {
 	platform.BaseModel
 
-	Volume string `gorm:"index:idx_volume" json:"volume"`
+	Volume  string `gorm:"index:idx_volume_snapshot_volume" json:"volume"`
+	Version int    `gorm:"index:idx_volume_snapshot_version" json:"version"`
 }
 
 func (VolumeSnapshotModel) TableName() string {

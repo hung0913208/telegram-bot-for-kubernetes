@@ -139,15 +139,27 @@ func (self *kubernetesImpl) SetWriteable(flag bool) error {
 }
 
 func (self *kubernetesImpl) GetClient() *kubeapi.Clientset {
+	if !self.readable {
+		return nil
+	}
+
 	return self.client
 }
 
 func (self *kubernetesImpl) GetPods(namespace string) (*corev1.PodList, error) {
+	if !self.readable {
+		return nil, errors.New("permission deny")
+	}
+
 	return self.client.CoreV1().Pods(namespace).
 		List(context.TODO(), metav1.ListOptions{})
 }
 
 func (self *kubernetesImpl) GetHelmPods(namespace string) (*corev1.PodList, error) {
+	if !self.readable {
+		return nil, errors.New("permission deny")
+	}
+
 	return self.client.CoreV1().Pods(namespace).
 		List(
 			context.TODO(),
@@ -158,6 +170,10 @@ func (self *kubernetesImpl) GetHelmPods(namespace string) (*corev1.PodList, erro
 }
 
 func (self *kubernetesImpl) GetPVs() (*corev1.PersistentVolumeList, error) {
+	if !self.readable {
+		return nil, errors.New("permission deny")
+	}
+
 	return self.client.CoreV1().PersistentVolumes().
 		List(
 			context.TODO(),
@@ -166,7 +182,12 @@ func (self *kubernetesImpl) GetPVs() (*corev1.PersistentVolumeList, error) {
 }
 
 func (self *kubernetesImpl) GetNodes() (*corev1.NodeList, error) {
-	return self.client.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
+	if !self.readable {
+		return nil, errors.New("permission deny")
+	}
+
+	return self.client.CoreV1().Nodes().
+		List(context.TODO(), metav1.ListOptions{})
 }
 
 func (self *kubernetesImpl) Ping() bool {
@@ -183,6 +204,10 @@ func (self *kubernetesImpl) Cron(
 	schedule, namespace string,
 	extendVolumes ...[]corev1.PersistentVolumeClaim,
 ) error {
+	if !self.writeable {
+		return errors.New("permission deny")
+	}
+
 	cronjobs := self.client.BatchV1().CronJobs(namespace)
 	volumes := make([]corev1.Volume, 0)
 
@@ -276,6 +301,9 @@ func (self *kubernetesImpl) Do(
 	extendVolumes ...[]corev1.PersistentVolumeClaim,
 ) error {
 	volumes := make([]corev1.Volume, 0)
+	if !self.writeable {
+		return errors.New("permission deny")
+	}
 
 	if len(extendVolumes) > 0 {
 		for _, pvc := range extendVolumes[0] {
@@ -362,6 +390,10 @@ func (self *kubernetesImpl) renderConfigMapExecHook(
 	namespace string,
 	command string,
 ) error {
+	if !self.writeable {
+		return errors.New("permission deny")
+	}
+
 	configmaps := self.client.CoreV1().
 		ConfigMaps(namespace)
 	spec := corev1.ConfigMap{
