@@ -32,6 +32,8 @@ type Api interface {
 	SetRegion(region string) error
 	SetToken() error
 
+	IsClusterLocked(clusterId string) (bool, error)
+
 	ListFirewall() ([]*api.Firewall, error)
 	ListCluster() ([]*api.Cluster, error)
 	ListServer(clusterId ...string) ([]*api.Server, error)
@@ -288,6 +290,27 @@ func (self *apiImpl) SetRegion(region string) error {
 	}
 
 	return self.SetToken()
+}
+
+func (self *apiImpl) IsClusterLocked(clusterId string) (bool, error) {
+	var status struct {
+		Locked bool
+	}
+
+	dbModule, err := container.Pick("elephansql")
+	if err != nil {
+		return true, err
+	}
+
+	dbConn, err := db.Establish(dbModule)
+	if err != nil {
+		return true, err
+	}
+
+	resp := dbConn.Model(&ClusterModel{}).
+		Where("account = ? and uuid = ?", self.uuid, clusterId).
+		Find(&status)
+	return status.Locked, resp.Error
 }
 
 func (self *apiImpl) GetAccount() string {

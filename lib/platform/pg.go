@@ -66,3 +66,11 @@ func (self *pgImpl) Unlock() error {
 func (self *pgImpl) Lock() error {
 	return nil
 }
+
+func (self *pgImpl) Prepare(uuid string) error {
+	return nil
+}
+
+func (self *pgImpl) Backup() error {
+	return nil
+}

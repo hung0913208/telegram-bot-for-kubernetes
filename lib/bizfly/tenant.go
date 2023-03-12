@@ -33,6 +33,7 @@ type tenantMetadataImpl struct {
 func NewTenant(
 	provider Api,
 	cluster *api.Cluster,
+	writeable ...bool,
 ) (kubernetes.Tenant, error) {
 	if cluster.ProvisionStatus != "PROVISIONED" {
 		return nil, errors.New("Cluster must be in state `provisioned`")
@@ -50,6 +51,16 @@ func NewTenant(
 			err,
 			len(kubeconfig),
 		)
+	}
+
+	if err = client.SetReadable(true); err != nil {
+		return nil, err
+	}
+
+	if len(writeable) > 0 {
+		if err = client.SetWriteable(writeable[0]); err != nil {
+			return nil, err
+		}
 	}
 
 	return &tenantImpl{
@@ -120,7 +131,11 @@ func NewTenantFromMetadata(
 		return nil, err
 	}
 
-	return NewTenant(client, &cluster.ExtendedCluster.Cluster)
+	locked, err := client.IsClusterLocked(properties.Cluster)
+	if err != nil {
+		return nil, err
+	}
+	return NewTenant(client, &cluster.ExtendedCluster.Cluster, locked)
 }
 
 func (self *tenantImpl) GetClient() (kubernetes.Kubernetes, error) {

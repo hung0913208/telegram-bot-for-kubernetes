@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"os"
+	"strconv"
 
 	"github.com/hung0913208/telegram-bot-for-kubernetes/lib/container"
 	"github.com/hung0913208/telegram-bot-for-kubernetes/lib/db"
@@ -13,9 +15,21 @@ import (
 )
 
 type Backup interface {
+	Prepare(uuid string) error
 	Backup() error
+}
+
+type BackupFullSetup interface {
+	Backup
+
 	GetStatus() (map[string]BackupState, error)
-	SetStatus(status BackupState) error
+	SetStatus(uuid string, status BackupState) error
+
+	SetClient(client kubernetes.Kubernetes)
+	SetNamespace(namespace string)
+	SetVolumes(volumes []corev1.PersistentVolumeClaim)
+	SetCommand(command string)
+	SetService(service string)
 }
 
 type backupImpl struct {
@@ -23,14 +37,13 @@ type backupImpl struct {
 	volumes   []corev1.PersistentVolumeClaim
 	hook      kubernetes.Hook
 	uuid      string
+	service   string
 	namespace string
 	command   string
 }
 
 func NewBackup(
-	name string,
 	client kubernetes.Kubernetes,
-	volumes []corev1.PersistentVolumeClaim,
 ) Backup {
 	hook := kubernetes.Hook{
 		Header:     DefaultHeaderOfBackupHook,
@@ -48,15 +61,12 @@ func NewBackup(
 		),
 		namespace: DefaultNamespaceToLocateBackupJob,
 		command:   DefaultCommandToBackupVolumes,
-		volumes:   volumes,
 		hook:      hook,
 	}
 }
 
 func NewCustomBackup(
-	name, command, namespace string,
 	client kubernetes.Kubernetes,
-	volumes []corev1.PersistentVolumeClaim,
 	hook kubernetes.Hook,
 ) Backup {
 	return &backupImpl{
@@ -64,11 +74,67 @@ func NewCustomBackup(
 			client,
 			hook,
 		),
-		namespace: namespace,
-		command:   command,
-		volumes:   volumes,
-		hook:      hook,
+		hook: hook,
 	}
+}
+
+func (self *backupImpl) SetNamespace(namespace string) {
+	self.namespace = namespace
+}
+
+func (self *backupImpl) SetCommand(command string) {
+	self.command = command
+}
+
+func (self *backupImpl) SetService(service string) {
+	self.service = service
+}
+
+func (self *backupImpl) SetClient(client kubernetes.Kubernetes) {
+	self.client = client
+}
+
+func (self *backupImpl) SetVolumes(volumes []corev1.PersistentVolumeClaim) {
+	self.volumes = volumes
+}
+
+func (self *backupImpl) Prepare(uuid string) error {
+	dbModule, err := container.Pick("elephansql")
+	if err != nil {
+		return err
+	}
+
+	dbConn, err := db.Establish(dbModule)
+	if err != nil {
+		return err
+	}
+
+	records := make([]BackupModel, 0)
+	for _, volume := range self.volumes {
+		records = append(records,
+			BackupModel{
+				BaseModel: BaseModel{
+					UUID: uuid,
+				},
+				Namespace: self.namespace,
+				Volume:    volume.Name,
+				State:     PreparingBackup,
+			},
+		)
+	}
+
+	batchSize, err := strconv.Atoi(os.Getenv("GORM_BATCH_SIZE"))
+	if err != nil {
+		batchSize = 100
+	}
+
+	resp := dbConn.
+		CreateInBatches(records, batchSize)
+	if resp.Error == nil {
+		self.uuid = uuid
+	}
+
+	return resp.Error
 }
 
 func (self *backupImpl) Backup() error {
@@ -117,8 +183,13 @@ func (self *backupImpl) Backup() error {
 				fmt.Sprintf(record.UUID),
 				self.command,
 				self.namespace,
-				int32(0),
+				self.volumes,
 			)
+			if err != nil {
+				return err
+			}
+
+			err = self.SetStatus(record.UUID, ProvisingBackup)
 			if err != nil {
 				return err
 			}
@@ -186,7 +257,27 @@ func (self *backupImpl) GetStatus() (map[string]BackupState, error) {
 	}
 }
 
-func (self *backupImpl) SetStatus(status BackupState) error {
+func (self *backupImpl) SetStatus(uuid string, status BackupState) error {
+	dbModule, err := container.Pick("elephansql")
+	if err != nil {
+		return err
+	}
+
+	dbConn, err := db.Establish(dbModule)
+	if err != nil {
+		return err
+	}
+
+	// @NOTE: the status must be greater than its current value.
+	//        Otherwide, we must reject this update since it could
+	//        cause our state machine go wary
+	resp := dbConn.Model(&BackupModel{}).
+		Where("uuid = ? and status < ?", uuid, status).
+		Update("status", status)
+	if resp.Error != nil {
+		return resp.Error
+	}
+
 	return nil
 }
 

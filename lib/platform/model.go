@@ -21,7 +21,8 @@ type BackupModel struct {
 	BaseModel
 
 	Namespace string      `gorm:"index:idx_namespace" json:"namespace"`
-	Volume    string      `gorm:"index:idx_volume" json:"volume"`
+	Volume    string      `gorm:"primaryKey,index:idx_volume" json:"volume"`
+	Service   string      `gorm:"index:idx_service" json:"service"`
 	Image     string      `json:"image"`
 	State     BackupState `json:"state"`
 }

@@ -2,6 +2,7 @@ package kubernetes
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -26,19 +27,21 @@ type Kubernetes interface {
 	GetPodMetrics() (*PodMetricsList, error)
 	GetNodeMetrics(node string) (*NodeMetricsList, error)
 
+	SetReadable(flag bool) error
+	SetWriteable(flag bool) error
+
 	Ping() bool
 	Cron(
 		name string,
 		command string,
 		schedule, namespace string,
-		extendVolumes ...map[string]corev1.PersistentVolumeClaim,
+		extendVolumes ...[]corev1.PersistentVolumeClaim,
 	) error
 	Do(
 		name string,
 		command string,
 		namespace string,
-		backOffLimit int32,
-		extendVolumes ...map[string]corev1.PersistentVolumeClaim,
+		extendVolumes ...[]corev1.PersistentVolumeClaim,
 	) error
 }
 
@@ -53,8 +56,10 @@ type Hook struct {
 }
 
 type kubernetesImpl struct {
-	client *kubeapi.Clientset
-	hook   Hook
+	client    *kubeapi.Clientset
+	hook      Hook
+	writeable bool
+	readable  bool
 }
 
 func NewFromKubeconfig(config []byte, hook ...Hook) (Kubernetes, error) {
@@ -70,12 +75,16 @@ func NewFromKubeconfig(config []byte, hook ...Hook) (Kubernetes, error) {
 
 	if len(hook) > 0 {
 		return &kubernetesImpl{
-			client: client,
-			hook:   hook[0],
+			client:    client,
+			hook:      hook[0],
+			readable:  true,
+			writeable: false,
 		}, nil
 	} else {
 		return &kubernetesImpl{
-			client: client,
+			client:    client,
+			readable:  false,
+			writeable: false,
 			hook: Hook{
 				Name:       "exec",
 				Exec:       []string{"/bin/bash", "-c", "/data/exec"},
@@ -93,7 +102,9 @@ func NewFromClient(client Kubernetes, hook ...Hook) Kubernetes {
 		}
 	} else {
 		return &kubernetesImpl{
-			client: client.GetClient(),
+			client:    client.GetClient(),
+			readable:  false,
+			writeable: false,
 			hook: Hook{
 				Name:       "exec",
 				Exec:       []string{"/bin/bash", "-c", "/data/exec"},
@@ -101,6 +112,30 @@ func NewFromClient(client Kubernetes, hook ...Hook) Kubernetes {
 			},
 		}
 	}
+}
+
+func (self *kubernetesImpl) SetReadable(flag bool) error {
+	if flag && !self.readable {
+		self.readable = true
+	}
+	if flag == self.readable {
+		return nil
+	}
+
+	return errors.New("can't disable immutable flag `readable` " +
+		"when it has been turn on")
+}
+
+func (self *kubernetesImpl) SetWriteable(flag bool) error {
+	if flag && !self.readable {
+		self.readable = true
+	}
+	if flag == self.readable {
+		return nil
+	}
+
+	return errors.New("can't disable immutable flag `writeable` " +
+		"when it has been turn on")
 }
 
 func (self *kubernetesImpl) GetClient() *kubeapi.Clientset {
@@ -146,7 +181,7 @@ func (self *kubernetesImpl) Cron(
 	name string,
 	command string,
 	schedule, namespace string,
-	extendVolumes ...map[string]corev1.PersistentVolumeClaim,
+	extendVolumes ...[]corev1.PersistentVolumeClaim,
 ) error {
 	cronjobs := self.client.BatchV1().CronJobs(namespace)
 	volumes := make([]corev1.Volume, 0)
@@ -238,8 +273,7 @@ func (self *kubernetesImpl) Do(
 	name string,
 	command string,
 	namespace string,
-	backOffLimit int32,
-	extendVolumes ...map[string]corev1.PersistentVolumeClaim,
+	extendVolumes ...[]corev1.PersistentVolumeClaim,
 ) error {
 	volumes := make([]corev1.Volume, 0)
 
@@ -271,6 +305,7 @@ func (self *kubernetesImpl) Do(
 		},
 	)
 
+	backOffLimit := int32(0)
 	jobs := self.client.BatchV1().Jobs(namespace)
 	spec := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{

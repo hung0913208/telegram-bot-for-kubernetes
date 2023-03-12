@@ -117,11 +117,13 @@ func (VolumeServerModel) TableName() string {
 }
 
 type VolumeClusterModel struct {
-	Pod     string `gorm:"primaryKey,index:tbl_bizfly_volume_cluster_idx_pod" json:"pod"`
-	Cluster string `gorm:"primaryKey,index:tbl_bizfly_volume_cluster_idx_cluser" json:"cluster"`
-	Volume  string `gorm:"index:tbl_bizfly_volume_cluster_idx_volume_id" json:"volume_id"`
-	Account string `gorm:"index:tbl_bizfly_volume_cluster_idx_account_id" json:"account"`
-	Size    int    `json:"size"`
+	Pod        string `gorm:"primaryKey,index:tbl_bizfly_volume_cluster_idx_pod" json:"pod"`
+	Cluster    string `gorm:"primaryKey,index:tbl_bizfly_volume_cluster_idx_cluser" json:"cluster"`
+	Deployment string `gorm:"index:tbl_bizfly_volume_cluster_idx_deployment" json:"deployment"`
+	Index      int    `gorm:"index:tbl_bizfly_volume_cluster_idx_index" json:"index"`
+	Volume     string `gorm:"index:tbl_bizfly_volume_cluster_idx_volume_id" json:"volume_id"`
+	Account    string `gorm:"index:tbl_bizfly_volume_cluster_idx_account_id" json:"account"`
+	Size       int    `json:"size"`
 }
 
 func (VolumeClusterModel) TableName() string {
@@ -159,6 +161,7 @@ func (FirewallBoundModel) TableName() string {
 }
 
 type SnapshotModel struct {
+	platform.BackupModel
 }
 
 func (SnapshotModel) TableName() string {
