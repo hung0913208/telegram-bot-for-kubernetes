@@ -5,12 +5,12 @@ DROP TABLE IF EXISTS "public"."tbl_bizfly_account";
 
 -- Table Definition
 CREATE TABLE "public"."tbl_bizfly_account" (
-    "uuid"       varchar(30) NOT NULL,
+    "uuid"       varchar(100) NOT NULL,
     "created_at" timestamptz,
     "updated_at" timestamptz,
     "email"      varchar(100),
     "password"   varchar(100),
-    "project_id" varchar(30),
+    "project_id" varchar(100),
     PRIMARY KEY ("uuid")
 );
 
@@ -26,12 +26,12 @@ DROP TABLE IF EXISTS "public"."tbl_bizfly_cluster";
 
 -- Table Definition
 CREATE TABLE "public"."tbl_bizfly_cluster" (
-    "uuid"       varchar(30) NOT NULL,
+    "uuid"       varchar(100) NOT NULL,
     "created_at" timestamptz,
     "updated_at" timestamptz,
-    "account"    varchar(30) NOT NULL,
+    "account"    varchar(100) NOT NULL,
     "name"       varchar(100) NOT NULL,
-    "status"     varchar(30) NOT NULL,
+    "status"     varchar(100) NOT NULL,
     "balance"    int8,
     "locked"     bool,
     "tags"       text,
@@ -61,8 +61,8 @@ DROP TABLE IF EXISTS "public"."tbl_bizfly_cluster_stat";
 
 -- Table Definition
 CREATE TABLE "public"."tbl_bizfly_cluster_stat" (
-    "cluster" varchar(30) NOT NULL,
-    "account" varchar(30),
+    "cluster" varchar(100) NOT NULL,
+    "account" varchar(100),
     "core"    int8,
     "memory"  int8,
     PRIMARY KEY ("cluster")
@@ -80,10 +80,10 @@ DROP TABLE IF EXISTS "public"."tbl_bizfly_firewall";
 
 -- Table Definition
 CREATE TABLE "public"."tbl_bizfly_firewall" (
-    "uuid"       varchar(30) NOT NULL,
+    "uuid"       varchar(100) NOT NULL,
     "created_at" timestamptz,
     "updated_at" timestamptz,
-    "account"    varchar(3) NOT NULL,
+    "account"    varchar(100) NOT NULL,
     PRIMARY KEY ("uuid")
 );
 
@@ -98,10 +98,10 @@ DROP TABLE IF EXISTS "public"."tbl_bizfly_firewall_bound";
 
 -- Table Definition
 CREATE TABLE "public"."tbl_bizfly_firewall_bound" (
-    "uuid"       varchar(30) NOT NULL,
+    "uuid"       varchar(100) NOT NULL,
     "created_at" timestamptz,
     "updated_at" timestam3ptz,
-    "account"    varchar(30) NOT NULL,
+    "account"    varchar(100) NOT NULL,
     "firewall"   varchar(100) NOT NULL,
     "type"       int8,
     "c_id_r"     varchar(100),
@@ -131,15 +131,15 @@ DROP TABLE IF EXISTS "public"."tbl_bizfly_pool";
 
 -- Table Definition
 CREATE TABLE "public"."tbl_bizfly_pool" (
-    "uuid"               varchar(30) NOT NULL,
+    "uuid"               varchar(100) NOT NULL,
     "created_at"         timestamptz,
     "updated_at"         timestamptz,
     "name"               varchar(50) NOT NULL,
-    "account" 	         varchar(30) NOT NULL,
-    "cluster"            varchar(30) NOT NULL,
+    "account" 	         varchar(100) NOT NULL,
+    "cluster"            varchar(100) NOT NULL,
     "zone"               varchar(5)  NOT NULL,
     "status"             varchar(20) NOT NULL,
-    "autoscale"          varchar(30) NOT NULL,
+    "autoscale"          varchar(100) NOT NULL,
     "enable_autoscaling" bool,
     "required_size"      int8,
     "limit_size"         int8,
@@ -175,14 +175,14 @@ DROP TABLE IF EXISTS "public"."tbl_bizfly_pool_node";
 
 -- Table Definition
 CREATE TABLE "public"."tbl_bizfly_pool_node" (
-    "uuid"       varchar(30) NOT NULL,
+    "uuid"       varchar(100) NOT NULL,
     "created_at" timestamptz,
     "updated_at" timestam3ptz,
     "name"       varchar(20) NOT NULL,
-    "account"    varchar(30) NOT NULL,
-    "pool" 	 varchar(30) NOT NULL,
-    "cluster"    varchar(30) NOT NULL,
-    "server"     varchar(30) NOT NULL,
+    "account"    varchar(100) NOT NULL,
+    "pool" 	 varchar(100) NOT NULL,
+    "cluster"    varchar(100) NOT NULL,
+    "server"     varchar(100) NOT NULL,
     "status" 	 varchar(15) NOT NULL,
     "reason"     text,
     PRIMARY KEY ("uuid")
@@ -217,12 +217,12 @@ DROP TABLE IF EXISTS "public"."tbl_bizfly_server";
 
 -- Table Definition
 CREATE TABLE "public"."tbl_bizfly_server" (
-    "uuid"       varchar(30) NOT NULL,
+    "uuid"       varchar(100) NOT NULL,
     "created_at" timestamptz,
     "updated_at" timestamptz,
-    "account"    varchar(30) NOT NULL,
+    "account"    varchar(100) NOT NULL,
     "status"     varchar(15) NOT NULL,
-    "cluster"    varchar(30) NOT NULL,
+    "cluster"    varchar(100) NOT NULL,
     "balance"    int8,
     "locked"     bool,
     "zone"       varchar(5) NOT NULL,
@@ -264,14 +264,15 @@ DROP TABLE IF EXISTS "public"."tbl_bizfly_volume";
 
 -- Table Definition
 CREATE TABLE "public"."tbl_bizfly_volume" (
-    "uuid"        varchar(30) NOT NULL,
+    "uuid"        varchar(100) NOT NULL,
     "created_at"  timestamptz,
     "updated_at"  timestamptz,
-    "account" 	  varchar(30) NOT NULL,
+    "account" 	  varchar(100) NOT NULL,
     "type"        varchar(15) NOT NULL,
     "description" text,
     "status"      varchar(15) NOT NULL,
     "zone"        varchar(5) NOT NULL,
+    "size"        bigint,
     PRIMARY KEY ("uuid")
 );
 
@@ -287,12 +288,12 @@ DROP TABLE IF EXISTS "public"."tbl_bizfly_volume_cluster";
 
 -- Table Definition
 CREATE TABLE "public"."tbl_bizfly_volume_cluster" (
-    "volume"     varchar(30) NOT NULL,
-    "account"    varchar(30) NOT NULL,
-    "deployment" varchar(30) NOT NULL,
+    "volume"     varchar(100) NOT NULL,
+    "account"    varchar(100) NOT NULL,
+    "deployment" varchar(100) NOT NULL,
     "index"      int8,
-    "pod"        varchar(30) NOT NULL,
-    "cluster"    varchar(30) NOT NULL,
+    "pod"        varchar(100) NOT NULL,
+    "cluster"    varchar(100) NOT NULL,
     "size"       int8,
     PRIMARY KEY ("pod","cluster")
 );
@@ -326,9 +327,9 @@ DROP TABLE IF EXISTS "public"."tbl_bizfly_volume_server";
 
 -- Table Definition
 CREATE TABLE "public"."tbl_bizfly_volume_server" (
-    "volume"  varchar(30) NOT NULL,
-    "account" varchar(30) NOT NULL,
-    "server"  varchar(30) NOT NULL,
+    "volume"  varchar(100) NOT NULL,
+    "account" varchar(100) NOT NULL,
+    "server"  varchar(100) NOT NULL,
     PRIMARY KEY ("volume")
 );
 
@@ -349,9 +350,9 @@ DROP TABLE IF EXISTS "public"."tbl_bizfly_snapshot";
 
 -- Table Definition
 CREATE TABLE "public"."tbl_bizfly_snapshot" (
-    "volume"  varchar(30) NOT NULL,
-    "account" varchar(30) NOT NULL,
-    "server"  varchar(30) NOT NULL,
+    "volume"  varchar(100) NOT NULL,
+    "account" varchar(100) NOT NULL,
+    "server"  varchar(100) NOT NULL,
     PRIMARY KEY ("volume")
 );
 

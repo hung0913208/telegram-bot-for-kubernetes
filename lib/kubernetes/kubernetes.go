@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 
@@ -18,6 +19,7 @@ type Ingress interface {
 
 type Kubernetes interface {
 	GetClient() *kubeapi.Clientset
+	GetDeployment(namespace string) (*appsv1.DeploymentList, error)
 	GetPods(namespace string) (*corev1.PodList, error)
 	GetHelmPods(namespace string) (*corev1.PodList, error)
 
@@ -161,6 +163,20 @@ func (self *kubernetesImpl) GetHelmPods(namespace string) (*corev1.PodList, erro
 	}
 
 	return self.client.CoreV1().Pods(namespace).
+		List(
+			context.TODO(),
+			metav1.ListOptions{
+				LabelSelector: "app.kubernetes.io/managed-by=Helm",
+			},
+		)
+}
+
+func (self *kubernetesImpl) GetDeployment(namespace string) (*appsv1.DeploymentList, error) {
+	if !self.readable {
+		return nil, errors.New("permission deny")
+	}
+
+	return self.client.AppsV1().Deployments(namespace).
 		List(
 			context.TODO(),
 			metav1.ListOptions{

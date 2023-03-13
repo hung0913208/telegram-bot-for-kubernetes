@@ -37,8 +37,8 @@ func NewDefaultTenant(
 		return nil, err
 	}
 
-	if _, err := client.GetPods(""); err != nil {
-		return nil, err
+	if !client.Ping() {
+		return nil, errors.New("can't access cluster")
 	}
 
 	if len(metadata) > 0 {
